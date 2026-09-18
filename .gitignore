@@ -1,0 +1,5 @@
+# временные файлы Excel
+~$*.xlsx
+~$*.xls
+Thumbs.db
+.DS_Store
