@@ -1,5 +1,8 @@
 # временные файлы Excel
 ~$*.xlsx
 ~$*.xls
+work/_*
+__pycache__/
+*.backup-*.html
 Thumbs.db
 .DS_Store

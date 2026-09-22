@@ -102,16 +102,17 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   const pageHead=(title,sub,crumb='',actions='')=>`${crumb?`<div class="breadcrumb">${crumb}</div>`:''}<div class="page-head"><div><h1>${title}</h1><div class="page-sub">${sub}</div></div>${actions?`<div class="page-actions">${actions}</div>`:''}</div>${globalFilters()}`;
   const globalFilters=()=>{
     const P=window.PERIOD||{mode:'ytd'};
-    const months=[['ytd','Весь 2026'],['2026-01','Январь 2026'],['2026-02','Февраль 2026'],['2026-03','Март 2026'],['2026-04','Апрель 2026'],['2026-05','Май 2026'],['2026-06','Июнь 2026'],['2026-07','Июль 2026'],['2026-08','Август 2026'],['2026-09','Сентябрь 2026']];
-    const opts=months.map(m=>`<option value="${m[0]}" ${P.mode===m[0]?'selected':''}>${m[1]}</option>`).join('');
+    const MNn=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    const yopt=(y)=>{const av=(y===2026)?'ytd':('y'+y);let s=`<optgroup label="${y}"><option value="${av}" ${P.mode===av?'selected':''}>Весь ${y}</option>`;for(let i=1;i<=12;i++){const v=y+'-'+String(i).padStart(2,'0');s+=`<option value="${v}" ${P.mode===v?'selected':''}>${MNn[i-1]} ${y}</option>`;}return s+'</optgroup>';};
+    const opts=[2026,2025,2024].map(yopt).join('');
     return `<div class="filter-strip"><span class="filter-label">Период</span>
       <select id="periodSel" class="period">${opts}<option value="custom" ${P.mode==='custom'?'selected':''}>Произвольный период…</option></select>
       <span class="prange" id="prangeWrap" style="${P.mode==='custom'?'':'display:none'}">с <input type="date" id="pFrom" value="${P.from||''}"> по <input type="date" id="pTo" value="${P.to||''}"> <button class="pbtn" id="pApply">Применить</button></span>
-      <span class="scope-chip">Москва</span><span class="scope-chip">HeadRock</span>
+      <span class="scope-chip">Вся компания</span><span class="scope-chip">2024–2026</span>
       <span class="pinfo" id="pInfo"></span></div>`;
   };
   const sectionCard=(title,body,right='')=>`<section class="card pad"><div class="card-title">${title}${right?`<span class="right">${right}</span>`:''}</div>${body}</section>`;
-  const notice=()=>`<div class="notice">${ico('alert')} <b>Покрытие данных:</b> текущие файлы содержат Москва / HeadRock за 01.01–30.09.2026. План, АППГ, скидки, маржинальность, KRONbuild, ENKI и Владивосток пока без источника.</div>`;
+  const notice=()=>`<div class="notice">${ico('alert')} <b>Покрытие данных:</b> вся компания, все бренды (HeadRock/KRONbuild/ENKI), 2024–2026, с планом и АППГ. Без источника пока: скидки, себестоимость, маржинальность.</div>`;
 
   function lineBars(series,keys=[['fact','Факт','fact'],['prev','АППГ','prev'],['plan','План','plan']],small=false){
     const width=760,h=small?160:200,pad={l:36,r:8,t:10,b:28}; const innerW=width-pad.l-pad.r, innerH=h-pad.t-pad.b;
@@ -129,11 +130,11 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   }
   function gauge(actual,plan){const p=Math.min(100,planPct(actual,plan)); const angle=180*p/100; const r=76,cx=100,cy=100; const polar=a=>{const rad=(Math.PI/180)*a;return [cx+r*Math.cos(rad),cy-r*Math.sin(rad)]}; const [x1,y1]=polar(180),[x2,y2]=polar(180-angle); const large=angle>180?1:0; return `<div class="gauge"><svg viewBox="0 0 200 110"><path d="M 24 100 A 76 76 0 0 1 176 100" fill="none" stroke="#eef0f3" stroke-width="18" stroke-linecap="round"/><path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="#f56a1c" stroke-width="18" stroke-linecap="round"/></svg><div class="gauge-value">${pct(p)}</div><div class="gauge-label">выполнение плана</div></div>`}
 
-  function overviewPage(){const o=D.overview;return `${pageHead('Обзор продаж Кайрос','Общая картина по доступным данным компании.')}${notice()}<div class="kpi-grid">${kpi('Продажи нетто, ₽',fmtMoney(o.sales),'sales',`Продажи ${fmtMoney(o.grossSales)} · возвраты ${fmtMoney(o.returns)}`,'','source')}${kpi('Количество, шт.',o.units.toLocaleString('ru-RU'),'box','единицы хранения','','source')}${kpi('План / факт','—','target','Нужен отдельный источник планов','','missing')}${kpi('Δ к прошлому году','—','trend','Нужен аналогичный период 2025','','missing')}${kpi('Уникальные партнеры',o.clients.toLocaleString('ru-RU'),'users','по сводной части отчета','','source')}${kpi('Заказы',o.orders.toLocaleString('ru-RU'),'cart',`Средний заказ ${fmtMoney(o.avgOrder)}`,'','source')}</div>
-  <div class="hero-grid"><div class="card chart-card"><div class="card-title">Продажи по месяцам ${dataTag('source')}<span class="right">факт 2026</span></div>${lineBars(o.months,[['fact','Факт','fact']])}</div><div class="card pad"><div class="card-title">План / факт ${dataTag('missing')}</div>${missingBlock('Нет данных по плану','Для этого блока нужен план продаж по периоду, филиалу и бренду. После подключения здесь появится полукруг выполнения плана.')}</div></div>
-  <div class="branch-grid"><div class="card branch-card"><div class="branch-top"><span class="branch-title">Москва</span>${dataTag('partial','HeadRock из отчета')}<button class="ghost" data-sales-branch="moscow">Детализация →</button></div><div class="brand-summary"><div class="mini"><div class="mini-label">Продажи HeadRock</div><div class="mini-value">${fmtMoney(o.sales)}</div></div><div class="mini"><div class="mini-label">Возвраты</div><div class="mini-value">${fmtMoney(o.returns)}</div><div class="mini-label">${pct(o.returnsRate)} от продаж</div></div><div class="mini"><div class="mini-label">KRONbuild</div><div class="mini-value missing-value">—</div>${dataTag('missing')}</div><div class="mini"><div class="mini-label">ENKI</div><div class="mini-value missing-value">—</div>${dataTag('missing')}</div></div></div><div class="card branch-card"><div class="branch-top"><span class="branch-title">Владивосток</span>${dataTag('missing')}</div>${missingBlock('Филиал не покрыт текущими файлами','Нужна аналогичная выгрузка продаж и ABC по Владивостоку.')}</div></div>
-  <div class="dashboard-grid">${sectionCard('Бренды',`<div class="brand-list"><div class="brand-line"><span>${brandLogo('headrock','HeadRock')}</span><b>${fmtMoney(o.sales)}</b><span>${dataTag('source')}</span></div><div class="brand-line"><span>${brandLogo('kron','KRONbuild')}</span><b class="missing-value">—</b><span>${dataTag('missing')}</span></div><div class="brand-line"><span>${brandLogo('enki','ENKI')}</span><b class="missing-value">—</b><span>${dataTag('missing')}</span></div></div>`)}${sectionCard('Категории HeadRock / инструмент',hbars(o.categories.map(x=>({name:x.name,value:x.share})),'value')+`<div class="source-note">Источник: ABC-анализ. Выручка этого отчета не смешивается с нетто-продажами на верхнем уровне.</div>`,dataTag('source'))}${sectionCard('Бизнес-регионы',missingBlock('Нужна нормализация бизнес-регионов','В текущем отчете есть региональные уровни и группы менеджеров, но нет чистого справочника «бизнес-регион ↔ менеджер». Блок оставлен в архитектуре.'),dataTag('partial'))}</div>
-  <div class="grid-3">${sectionCard('ТОП-5 клиентов',`<table class="data-table"><thead><tr><th>Клиент</th><th class="num">Продажи</th><th class="num">Доля</th></tr></thead><tbody>${o.topClients.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td><td class="num">${pct(x.share)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('ТОП-5 товаров',`<table class="data-table"><thead><tr><th>Товар</th><th class="num">Продажи</th></tr></thead><tbody>${o.topProducts.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('Рост / зоны внимания',missingBlock('Нет сравнения во времени','Чтобы рассчитывать рост и просадки, нужен аналогичный период 2025 либо несколько последовательных выгрузок.'),dataTag('missing'))}</div>`}
+  function overviewPage(){const o=D.overview;const _B=(D.salesDetail&&D.salesDetail.brands)||{};const _hr=(_B.headrock&&_B.headrock.sales)||0,_kr=(_B.kron&&_B.kron.sales)||0,_en=(_B.enki&&_B.enki.sales)||0;const _RG=D.regionsData||{};const _rl=Object.keys(_RG).map(r=>({name:r,value:_RG[r].sales})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);return `${pageHead('Обзор продаж Кайрос','Вся компания, все бренды. Период выбирается справа вверху.')}${notice()}<div class="kpi-grid">${kpi('Продажи нетто, ₽',fmtMoney(o.sales),'sales',`Продажи ${fmtMoney(o.grossSales)} · возвраты ${fmtMoney(o.returns)}`,'','source')}${kpi('Количество, шт.',o.units.toLocaleString('ru-RU'),'box','единицы хранения','','source')}${kpi('Выполнение плана',o.planDone!=null?pct(o.planDone):(o.plan?pct(+(o.sales/o.plan*100).toFixed(1)):'—'),'target',o.planYTD?('план YTD '+fmtMoney(o.planYTD)):(o.plan?('годовой план '+fmtMoney(o.plan)):'нет плана'),'',o.plan?'source':'missing')}${kpi('Δ к прошлому году',o.growth!=null?delta(o.growth):'—','trend','к тем же месяцам прошлого года','',o.growth!=null?'source':'missing')}${kpi('Уникальные партнеры',o.clients.toLocaleString('ru-RU'),'users','по сводной части отчета','','source')}${kpi('Заказы',o.orders.toLocaleString('ru-RU'),'cart',`Средний заказ ${fmtMoney(o.avgOrder)}`,'','source')}</div>
+  <div class="hero-grid"><div class="card chart-card"><div class="card-title">Продажи по месяцам ${dataTag('source')}<span class="right">факт · план · АППГ</span></div>${lineBars(o.months,[['fact','Факт','fact'],['plan','План','plan'],['prev','АППГ','prev']])}</div><div class="card pad"><div class="card-title">Выполнение плана ${o.plan?dataTag('source'):dataTag('missing')}</div>${o.plan?gauge(o.sales,o.planYTD||o.plan)+`<div style="text-align:center;font-size:12px;color:#727987;margin-top:6px">Факт ${fmtMoney(o.sales)} из плана ${fmtMoney(o.planYTD||o.plan)}${o.planYTD?' (YTD)':' (год)'}</div>`:missingBlock('Нет данных по плану','План на этот период не найден.')}</div></div>
+  <div class="card branch-card"><div class="branch-top"><span class="branch-title">Вся компания — по брендам</span>${dataTag('source')}<button class="ghost" data-sales-branch="moscow">Детализация →</button></div><div class="brand-summary"><div class="mini"><div class="mini-label">HeadRock</div><div class="mini-value">${fmtMoney(_hr)}</div></div><div class="mini"><div class="mini-label">KRONbuild</div><div class="mini-value">${fmtMoney(_kr)}</div></div><div class="mini"><div class="mini-label">ENKI</div><div class="mini-value">${fmtMoney(_en)}</div></div><div class="mini"><div class="mini-label">Возвраты</div><div class="mini-value">${fmtMoney(o.returns)}</div><div class="mini-label">${pct(o.returnsRate)} от продаж</div></div></div></div>
+  <div class="dashboard-grid">${sectionCard('Бренды',`<div class="brand-list"><div class="brand-line"><span>${brandLogo('headrock','HeadRock')}</span><b>${fmtMoney(_hr)}</b><span>${dataTag('source')}</span></div><div class="brand-line"><span>${brandLogo('kron','KRONbuild')}</span><b>${fmtMoney(_kr)}</b><span>${dataTag('source')}</span></div><div class="brand-line"><span>${brandLogo('enki','ENKI')}</span><b>${fmtMoney(_en)}</b><span>${dataTag('source')}</span></div></div>`)}${sectionCard('Категории',hbars(o.categories.map(x=>({name:x.name,value:x.share})),'value'),dataTag('source'))}${sectionCard('Бизнес-регионы',_rl.length?hbars(_rl,'value',fmtMoney):missingBlock('Нет данных по регионам','—'),dataTag('source'))}</div>
+  <div class="grid-3">${sectionCard('ТОП-5 клиентов',`<table class="data-table"><thead><tr><th>Клиент</th><th class="num">Продажи</th><th class="num">Доля</th></tr></thead><tbody>${o.topClients.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td><td class="num">${pct(x.share)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('ТОП-5 товаров',`<table class="data-table"><thead><tr><th>Товар</th><th class="num">Продажи</th></tr></thead><tbody>${o.topProducts.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('Рост к прошлому году',`<div style="padding:14px 4px"><div style="font-size:32px;font-weight:800;margin-bottom:4px">${o.growth!=null?delta(o.growth):'—'}</div><div style="font-size:13px;color:#727987">Продажи ${fmtMoney(o.sales)} против ${fmtMoney(Math.round(o.sales/(1+((o.growth||0)/100))))} за тот же период прошлого года.</div></div>`,o.growth!=null?dataTag('source'):dataTag('missing'))}</div>`}
 
   function salesPage(){const isBranch=state.salesMode==='branch';const obj=isBranch?D.salesDetail.branches[state.branch]:D.salesDetail.brands[state.brand];const title=isBranch?`Филиал — ${obj.name}`:`Бренд — ${obj.name}`;const missing=!!obj.missing || obj.sales===null;const chooser=isBranch?`<div class="segment"><button class="seg-btn ${state.branch==='moscow'?'active':''}" data-branch="moscow">Москва</button><button class="seg-btn ${state.branch==='vlad'?'active':''}" data-branch="vlad">Владивосток</button></div>`:`<div class="segment"><button class="seg-btn ${state.brand==='headrock'?'active':''}" data-brand="headrock">HeadRock</button><button class="seg-btn ${state.brand==='kron'?'active':''}" data-brand="kron">KRONbuild</button><button class="seg-btn ${state.brand==='enki'?'active':''}" data-brand="enki">ENKI</button></div>`;
     if(missing)return `${pageHead(title,isBranch?'Аналитика выбранного филиала.':'Аналитика выбранного бренда.','Продажи')}<div class="toolbar"><div class="segment"><button class="seg-btn ${isBranch?'active':''}" data-sales-mode="branch">Филиал</button><button class="seg-btn ${!isBranch?'active':''}" data-sales-mode="brand">Бренд</button></div><span class="spacer"></span>${chooser}</div><div class="card pad">${missingBlock('Для выбранного разреза нет данных',isBranch?'Текущие Excel покрывают только Москва / HeadRock. Нужна выгрузка по Владивостоку.':'Текущие Excel покрывают только HeadRock. Нужна выгрузка продаж и ABC по этому бренду.')}</div>`;
@@ -456,30 +457,71 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   function periodRange(){
     var P=window.PERIOD;
     if(P.mode==='custom'&&P.from&&P.to){return [parseInt(P.from.replace(/-/g,'')),parseInt(P.to.replace(/-/g,''))];}
-    if(P.mode&&P.mode.indexOf('2026-')===0){var y=P.mode.slice(0,4),m=P.mode.slice(5,7);return [parseInt(y+m+'01'),parseInt(y+m+'31')];}
-    return [20260101,20260931]; // ytd 2026
+    if(P.mode&&/^y\d{4}$/.test(P.mode)){var yy=P.mode.slice(1);return [parseInt(yy+'0101'),parseInt(yy+'1231')];}
+    if(P.mode&&/^\d{4}-\d{2}$/.test(P.mode)){var y=P.mode.slice(0,4),m=P.mode.slice(5,7);return [parseInt(y+m+'01'),parseInt(y+m+'31')];}
+    return [20260101,20261231]; // ytd = 2026
   }
   function recompute(){
     var D=window.KRS_DATA; if(!D.tx){return;}
-    var rg=periodRange(), lo=rg[0], hi=rg[1];
-    var sales=0, qty=0, ordersSet={}, clientsSet={}, byMonth={}, byCat={};
+    var rg=periodRange(), lo=rg[0], hi=rg[1], yr=Math.floor(lo/10000);
+    var sales=0, qty=0, ordersSet={}, clientsSet={}, byMonth={}, byCat={}, byBrand={}, compRev={}, perClient={};
     for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; var d=t[0]; if(d<lo||d>hi)continue;
-      sales+=t[4]; qty+=t[3]; clientsSet[t[1]]=1; ordersSet[t[1]+'|'+t[0]]=1;
-      var mk=(''+d).slice(0,6); byMonth[mk]=(byMonth[mk]||0)+t[4];
-      var cn=D.txCats[D.txSkus[t[2]][2]]; byCat[cn]=(byCat[cn]||0)+t[4];
+      var net=t[4], cix=t[1], sk=t[2];
+      sales+=net; qty+=t[3]; clientsSet[cix]=1; ordersSet[cix+'|'+d]=1;
+      byMonth[(''+d).slice(0,6)]=(byMonth[(''+d).slice(0,6)]||0)+net;
+      var si=D.txSkus[sk]; byCat[D.txCats[si[2]]]=(byCat[D.txCats[si[2]]]||0)+net;
+      var br=si[3]||'HeadRock'; byBrand[br]=(byBrand[br]||0)+net;
+      if(net>0)compRev[sk]=(compRev[sk]||0)+net;
+      var pc=perClient[cix]||(perClient[cix]={net:0,qty:0,orders:{},last:0,skus:{}});
+      pc.net+=net; pc.qty+=t[3]; pc.orders[d]=1; if(d>pc.last)pc.last=d; if(net!==0)pc.skus[sk]=1;
     }
-    var nClients=Object.keys(clientsSet).length; var nOrders=Object.keys(ordersSet).length;
-    // update overview object in place
+    var nClients=Object.keys(clientsSet).length, nOrders=Object.keys(ordersSet).length;
+    // ABC A-набор за период
+    var arr=Object.keys(compRev).map(function(k){return [k,compRev[k]];}).sort(function(a,b){return b[1]-a[1];});
+    var tot=arr.reduce(function(s,x){return s+x[1];},0)||1, cum=0, Aset={};
+    arr.forEach(function(x){cum+=x[1]; if(cum/tot<=0.8)Aset[x[0]]=1;});
+    var nA=Object.keys(Aset).length;
+    // Обзор
     var o=D.overview;
-    o.sales=sales; o.grossSales=sales; o.units=Math.round(qty); o.clients=nClients; o.orders=nOrders; o.avgOrder=nOrders?Math.round(sales/nOrders):0;
-    // months array for chart (2026 Jan..Sep)
-    var mn={'01':'Янв','02':'Фев','03':'Мар','04':'Апр','05':'Май','06':'Июн','07':'Июл','08':'Авг','09':'Сен'};
-    o.months=Object.keys(mn).map(function(m){var k='2026'+m; return {m:mn[m],fact:+( (byMonth[k]||0)/1e6 ).toFixed(3),plan:null,prev:null};});
-    // categories top
-    var cats=Object.keys(byCat).map(function(c){return {name:c,sales:byCat[c]};}).filter(function(x){return x.sales>0;}).sort(function(a,b){return b.sales-a.sales;});
+    o.sales=Math.round(sales); o.grossSales=Math.round(sales); o.units=Math.round(qty);
+    o.clients=nClients; o.orders=nOrders; o.avgOrder=nOrders?Math.round(sales/nOrders):0;
+    var MNn=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    var planY=(D.plan&&D.plan[''+yr])?D.plan[''+yr].months:null;
+    o.months=[]; for(var mi=1;mi<=12;mi++){var mm=(mi<10?'0':'')+mi;
+      o.months.push({m:MNn[mi-1],fact:+(((byMonth[yr+mm]||0))/1e6).toFixed(3),
+        prev:+(((byMonth[(yr-1)+mm]||0))/1e6).toFixed(3),
+        plan:(planY&&planY[mi]!=null)?+(planY[mi]/1e6).toFixed(3):null});}
+    var curM=Math.floor((hi%10000)/100)||12, prevSame=0;
+    for(var m2=1;m2<=curM;m2++){var mm2=(m2<10?'0':'')+m2; prevSame+=(byMonth[(yr-1)+mm2]||0);}
+    o.growth=prevSame?+(((sales-prevSame)/prevSame*100).toFixed(1)):null;
+    o.plan=(D.plan&&D.plan[''+yr])?D.plan[''+yr].annual:null;
+    o.planYTD=planY?(function(){var s=0;for(var k=1;k<=curM;k++){if(planY[k]!=null)s+=planY[k];}return Math.round(s);})():null;
+    o.planDone=(o.planYTD)?+((sales/o.planYTD*100).toFixed(1)):null;
+    o.brandFact={headrock:Math.round(byBrand['HeadRock']||0),kron:Math.round(byBrand['KRONbuild']||0),enki:Math.round(byBrand['ENKI']||0)};
+    var cats=Object.keys(byCat).map(function(c){return {name:c,sales:byCat[c]};}).filter(function(x){return x.sales>0&&x.name!=='Без категории';}).sort(function(a,b){return b.sales-a.sales;});
     var ctot=cats.reduce(function(s,x){return s+x.sales;},0)||1;
-    o.categories=cats.filter(function(x){return x.name!=='Без категории';}).slice(0,8).map(function(x){return {name:x.name,sales:Math.round(x.sales),share:+(x.sales/ctot*100).toFixed(1)};});
-    // info label
+    o.categories=cats.slice(0,8).map(function(x){return {name:x.name,sales:Math.round(x.sales),share:+(x.sales/ctot*100).toFixed(1)};});
+    // Бренды
+    try{if(D.salesDetail&&D.salesDetail.brands){var bm={headrock:'HeadRock',kron:'KRONbuild',enki:'ENKI'};for(var bk in bm){if(D.salesDetail.brands[bk])D.salesDetail.brands[bk].sales=Math.round(byBrand[bm[bk]]||0);}}}catch(e){}
+    // Список клиентов за период
+    try{
+      var refd=D.refDate?parseInt(D.refDate.replace(/-/g,'')):hi;
+      function toDate(x){x=''+x;return new Date(+x.slice(0,4),+x.slice(4,6)-1,+x.slice(6,8));}
+      var nc=[];
+      for(var cx in perClient){var pc=perClient[cx]; if(pc.net<=0)continue;
+        var name=D.txClients[cx]; if(!name)continue;
+        var no=Object.keys(pc.orders).length, ab=0;
+        for(var s in Aset){if(pc.skus[s])ab++;}
+        var ls=''+pc.last, lastIso=pc.last?(ls.slice(0,4)+'.'+ls.slice(4,6)+'.'+ls.slice(6,8)):'—';
+        nc.push({id:'c_'+name.toLowerCase().replace(/[^a-zа-я0-9]/g,'').slice(0,20),name:name,
+          manager:(D.clientRegion&&D.clientRegion[name])||'—',region:(D.clientRegion&&D.clientRegion[name])||'—',
+          sales:Math.round(pc.net),plan:null,growth:null,brands:1,categories:0,sku:Object.keys(pc.skus).length,
+          last:lastIso,potential:'—',status:'Активный',avgCheck:no?Math.round(pc.net/no):0,freq:no,
+          aGap:nA-ab,days:pc.last?Math.round((toDate(refd)-toDate(pc.last))/86400000):null});
+      }
+      nc.sort(function(a,b){return b.sales-a.sales;});
+      if(nc.length)D.clients=nc;
+    }catch(e){}
     var lbl=window.PERIOD.mode==='custom'?(window.PERIOD.from+' — '+window.PERIOD.to):(window.PERIOD.mode==='ytd'?'весь 2026':window.PERIOD.mode);
     setTimeout(function(){var el=document.getElementById('pInfo'); if(el)el.textContent='Показано: '+lbl+' · '+fmtMoney(sales)+' · '+nClients+' клиентов';},50);
   }
