@@ -6,3 +6,21 @@ __pycache__/
 *.backup-*.html
 Thumbs.db
 .DS_Store
+
+# Контур.Фокус — секреты и кэш (не коммитить)
+work/kontur_key.txt
+work/_kontur_cache.json
+
+# скачанные референс-архивы (не коммитить)
+*.zip
+
+# временные скрипты/скрины и служебные каталоги инструментов
+scratchpad/
+.agents/
+.claude/
+.codex/
+.impeccable/
+output/
+
+# большие бинарники (>100МБ, лимит GitHub)
+Дизайн/БрендБук.pdf

@@ -21,6 +21,7 @@ except Exception: pass
 ROOT   = Path(__file__).resolve().parent
 F_SALES= ROOT/"Продажи по бизнес регионам 24г-26г.xlsx"
 F_STOCK= ROOT/"Остатки и доступность по сериям.xlsx"
+F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = ROOT/"План_25_26.xlsx"
@@ -31,7 +32,7 @@ def _find_client_inn():
     return None
 TEMPLATE_SRC = ROOT/"Kairos_dashboard_final.html"      # источник вёрстки (из него берём слот данных)
 OUT    = ROOT/"Kairos_dashboard_rebuilt.html"          # результат (отдельный файл до проверки)
-CACHE  = ROOT/"work"/"_sales_rows.pkl"                 # кэш сырых строк продаж
+CACHE  = ROOT/"work"/"_sales_rows2.pkl"                # кэш сырых строк продаж (v2: с артикулом)
 
 CUR_YEAR, PREV_YEAR = 2026, 2025
 TURN_WINDOW_DAYS = 90          # окно для оборачиваемости (DOS)
@@ -51,12 +52,18 @@ def load_price():
     import openpyxl
     if not F_PRICE.exists(): print("  [!] нет прайса"); return {},{}
     wb=openpyxl.load_workbook(F_PRICE,data_only=True,read_only=True); rows=[]
+    art_price={}
+    def _pr(x):
+        try: return float(x)
+        except (TypeError,ValueError): return 0.0
     if 'HeadRock' in wb.sheetnames:
         ws=wb['HeadRock']; cat=None
         for r in ws.iter_rows(min_row=9,values_only=True):
             art=r[1] if len(r)>1 else None; name=r[2] if len(r)>2 else None
             if art and (name is None or str(name).strip()==''): cat=str(art).strip(); continue
-            if art and name: rows.append((str(art).strip(),str(name).strip(),'HeadRock',cat))
+            if art and name:
+                a=str(art).strip(); rows.append((a,str(name).strip(),'HeadRock',cat))
+                if len(r)>6: art_price[a]=_pr(r[6])          # колонка G = цена
     if 'KRONbuild' in wb.sheetnames:
         ws=wb['KRONbuild']; cat=None
         for r in ws.iter_rows(min_row=10,values_only=True):
@@ -64,11 +71,55 @@ def load_price():
             if (art is None or str(art).strip()=='') and name and str(name).strip(): cat=str(name).strip(); continue
             if art and name:
                 brand='ENKI' if (cat and 'ENKI' in cat.upper()) else 'KRONbuild'
-                rows.append((str(art).strip(),str(name).strip(),brand,cat))
+                a=str(art).strip(); rows.append((a,str(name).strip(),brand,cat))
+                if len(r)>6: art_price[a]=_pr(r[6])
     wb.close()
     price={nrm(n):(a,n,b,c) for a,n,b,c in rows}
-    print(f"  прайс: {len(rows)} SKU")
+    price['__art_price__']=art_price                        # цена по артикулу
+    print(f"  прайс: {len(rows)} SKU, цен по артикулу: {len(art_price)}")
     return price
+
+def load_geo():
+    f=ROOT/"geo_ru.json"
+    if f.exists():
+        try:
+            g=json.loads(f.read_text(encoding='utf-8')); g.pop('_note',None)
+            n=sum(len(cs) for sub in g.values() for cs in sub.values())
+            print(f"  гео-справочник: округов {len(g)}, городов {n}")
+            return g
+        except Exception as e: print("  [!] geo_ru.json:",e)
+    return {}
+
+def load_rumap():
+    f=ROOT/"geo_rumap.json"
+    if f.exists():
+        try:
+            m=json.loads(f.read_text(encoding='utf-8'))
+            print(f"  карта РФ: регионов {len(m.get('regions',[]))}")
+            return m
+        except Exception as e: print("  [!] geo_rumap.json:",e)
+    return {}
+
+def load_kontur():
+    """ИНН-справочник (имя из 1С -> ИНН) + кэш обогащения Контур.Фокус (ИНН -> данные)."""
+    cinn={}
+    f=ROOT/"work"/"_client_inn.xlsx"
+    if f.exists():
+        try:
+            import openpyxl
+            wb=openpyxl.load_workbook(f,read_only=True,data_only=True)
+            for r in wb.active.iter_rows(min_row=2,values_only=True):
+                nm=r[0] if len(r)>0 else None; inn=r[2] if len(r)>2 else None
+                if nm and inn: cinn[nrm(str(nm))]=str(inn).strip()
+            wb.close()
+        except Exception as e: print("  [!] _client_inn.xlsx:",e)
+    kont={}
+    kf=ROOT/"work"/"_kontur_cache.json"
+    if kf.exists():
+        try: kont=json.loads(kf.read_text(encoding='utf-8'))
+        except Exception as e: print("  [!] _kontur_cache.json:",e)
+    print(f"  Контур: ИНН-справочник {len(cinn)} имён · обогащено компаний {len(kont)}")
+    return cinn, kont
 
 def brand_of(name, price):
     m=price.get(nrm(name))
@@ -79,8 +130,28 @@ def brand_of(name, price):
     if 'headrock' in u or 'хедрок' in u: return 'HeadRock'
     return 'HeadRock'   # инструмент по умолчанию — HeadRock
 
+POSM_KW=('каталог','буклет','брошюр','плакат','воблер','листовк','ценник','наклейк','пакет','стенд','полиграф','посм','pos-','pos ','сумка','ролл-ап','ролап','штендер','флаер')
+def is_posm(name):
+    n=(name or '').lower()
+    return any(k in n for k in POSM_KW)
+
 def cat_art(name, price):
     m=price.get(nrm(name)); return (m[3],m[0]) if m else (None,None)
+
+def group_cat(cat, brand, name=None):
+    """Укрупняем категории KRON/ENKI в верхние группы (по прайс-категории, а если её нет — по названию); HeadRock — по прайсу как есть."""
+    def _infer(t):
+        if not t: return None
+        if 'пена' in t: return 'Монтажные пены'
+        if 'герметик' in t: return 'Герметики'
+        if 'клей' in t or 'жидкие гвозд' in t: return 'Клей'
+        if 'краск' in t or 'эмал' in t or 'грунт' in t or 'аэрозол' in t: return 'Аэрозольные краски'
+        if 'пистолет' in t: return 'Пистолеты и оснастка'
+        return None
+    if brand in ('KRONbuild','ENKI'):
+        g=_infer((cat or '').lower()) or _infer((name or '').lower())
+        if g: return g
+    return cat
 
 # ---------------- ПРОДАЖИ: быстрый загрузчик (значения read_only + уровни из XML) --------
 def load_sales_rows():
@@ -101,38 +172,60 @@ def load_sales_rows():
         r+=1
         if r<8: continue
         c1=v[0] if len(v)>0 else None
+        art=v[3] if len(v)>3 else None            # колонка D = Номенклатура.Артикул
         q =v[5] if len(v)>5 else None
         gr=v[6] if len(v)>6 else None
         rt=v[7] if len(v)>7 else None
         nt=v[8] if len(v)>8 else None
         if c1 is None and nt is None and q is None: continue
-        rows.append([levels.get(r,0),(str(c1).strip() if c1 is not None else None),q,gr,rt,nt])
+        rows.append([levels.get(r,0),(str(c1).strip() if c1 is not None else None),q,gr,rt,nt,(str(art).strip() if art else None)])
     wb.close()
     CACHE.parent.mkdir(exist_ok=True)
     CACHE.write_bytes(pickle.dumps(rows))
     print(f"  продажи: {len(rows)} строк за {round(time.time()-t0,1)}с")
     return rows
 
-DOC=('заказ клиента','реализация','корректировка','возврат','поступление','перемещение','списание','оприходование','инвентаризация')
+DOC=('заказ клиента','реализация','корректировка','возврат','поступление','перемещение','списание','оприходование','инвентаризация','отчет комиссионера')
 _isdoc=lambda s:any(s.lower().startswith(k) for k in DOC)
 _rx=re.compile(r'от (\d{2})\.(\d{2})\.(\d{4})')
 
+# округа Владивостока (остальные округа России -> Москва); СНГ -> ОПТ Москва; СЕТИ -> канал сети
+VLAD_OKRUGA={'Дальневосточный ФО','Сибирский ФО (Восток)','Сибирский ФО (Запад)','Уральский ФО'}
+SNG={'Беларусь','Казахстан','Кыргызстан'}
+def _geo(stack):
+    """По стеку определяем (регион/округ, филиал, канал)."""
+    r0=stack.get(0)
+    channel='СЕТИ' if r0=='СЕТИ' else 'ОПТ'
+    if r0=='Россия':
+        ok=stack.get(1)
+        if ok=='Россия' or ok is None: return ('Не распределён','Не распределён','ОПТ')
+        return (ok, 'Владивосток' if ok in VLAD_OKRUGA else 'Москва', 'ОПТ')
+    if r0 in SNG:      return (r0,'Москва','ОПТ')          # СНГ ведёт ОПТ Москва
+    if r0=='Москва':   return ('Москва','Москва','ОПТ')
+    if r0=='СЕТИ':     return ('СЕТИ','Москва','СЕТИ')      # Москва-сети
+    return ('Не распределён','Не распределён','ОПТ')
+
 def parse_sales(rows, price):
     n=len(rows); stack={}
+    art_cat={v[0]:v[3] for k,v in price.items() if k!='__art_price__' and isinstance(v,tuple) and v[0] and v[3]}
     company={'gross':0.0,'ret':0.0,'net':0.0,'qty':0}
     compYear=defaultdict(lambda:{'gross':0.0,'ret':0.0,'net':0.0,'qty':0})
-    brandYear=defaultdict(lambda:defaultdict(float))     # year -> brand -> net
+    brandYear=defaultdict(lambda:defaultdict(float))
     byBrand=defaultdict(float)
     regSales=defaultdict(float); regClients=defaultdict(lambda:defaultdict(float))
-    clientRegion={}
+    filSales=defaultdict(lambda:defaultdict(float))   # (год) -> филиал -> net; и канал
+    chanSales=defaultdict(lambda:defaultdict(float))  # (год) -> канал(ОПТ/СЕТИ) -> net
+    filChanYear=defaultdict(lambda:defaultdict(float))# год -> "филиал|канал" -> net
+    clientRegion={}; clientFilial={}; clientChannel={}; clientCity={}; clientSubject={}
     client_net=defaultdict(float); client_qty=defaultdict(float)
     client_orders=defaultdict(int); client_last=defaultdict(str); client_orderhist=defaultdict(list)
-    client_prod=defaultdict(lambda:defaultdict(lambda:[0.0,0.0]))   # client-> name -> [qty,net]
-    comp=defaultdict(lambda:[0.0,0.0])                              # name -> [qty,net] по компании
-    yearMonth=defaultdict(float)                                    # 'YYYYMM' -> net (компания)
-    clientYear=defaultdict(lambda:defaultdict(float))               # client -> year -> net
+    client_prod=defaultdict(lambda:defaultdict(lambda:[0.0,0.0]))
+    comp=defaultdict(lambda:[0.0,0.0])
+    yearMonth=defaultdict(float); ymGross=defaultdict(float); ymRet=defaultdict(float)
+    posm_ct=[0,0.0]
+    clientYear=defaultdict(lambda:defaultdict(float))
     tx=[]; tx_clients=[]; tx_cats=[]; tx_skus=[]; ci_m={}; ct_m={}; sk_m={}
-    inwork=[]; maxdate=0; orderStack={}   # level -> (dateInt, iso, num, osum) заказа на текущем пути
+    inwork=[]; maxdate=0; orderStack={}   # level -> (di,iso,num,osum, company, region, filial, channel)
     def ci(x):
         if x not in ci_m: ci_m[x]=len(tx_clients); tx_clients.append(x)
         return ci_m[x]
@@ -140,101 +233,200 @@ def parse_sales(rows, price):
         c=c or 'Без категории'
         if c not in ct_m: ct_m[c]=len(tx_cats); tx_cats.append(c)
         return ct_m[c]
-    def si(name):
-        cat,art=cat_art(name,price); key=art or ('n:'+nrm(name))
-        if key not in sk_m: sk_m[key]=len(tx_skus); tx_skus.append([art or '—',name,kt(cat),brand_of(name,price)])
+    def si(name,art=None):
+        cat,art_p=cat_art(name,price)
+        art=art or art_p                          # артикул из продаж; если нет — из прайса по имени
+        if art and art_cat.get(art): cat=art_cat[art]   # категория по артикулу приоритетнее имени (KRON/ENKI матчатся по артикулу)
+        _brand=brand_of(name,price)
+        cat=group_cat(cat,_brand,name)                   # укрупняем KRON/ENKI (пены/герметики/клей/краски), fallback по названию
+        key=art or ('n:'+nrm(name))
+        if key not in sk_m: sk_m[key]=len(tx_skus); tx_skus.append([art or '—',name,kt(cat),_brand])
         return sk_m[key]
-    curorder=None  # (dateInt, isoDate, num, sumnet)
+    def geo_for(companyname):
+        reg,fil,chan=_geo(stack)
+        low=(companyname or '').lower()
+        if 'нордлогистик' in low: reg,fil='Сибирский ФО (Запад)','Владивосток'   # Новосибирск
+        return reg,fil,chan
     for i in range(n):
-        lvl,name,q,gr,rt,nt=rows[i]
+        lvl,name,q,gr,rt,nt,art=rows[i]
         if name is None:
             stack[lvl]=None
             for L in [x for x in stack if x>lvl]: del stack[L]
             continue
         stack[lvl]=name
         for L in [x for x in stack if x>lvl]: del stack[L]
-        for L in [x for x in orderStack if x>=lvl]: del orderStack[L]   # глубже/на этом уровне — не предки
+        for L in [x for x in orderStack if x>=lvl]: del orderStack[L]
         if lvl==0: continue
-        if lvl==1:
-            clientRegion[name]=stack.get(0) or '(без региона)'; continue
         low=name.lower()
         def cur_ord():
             ks=[k for k in orderStack if k<lvl]
             return orderStack[max(ks)] if ks else None
-        if low.startswith('заказ клиента'):
-            client=stack.get(1); m=_rx.search(name)
-            client_orders[client]+=1
-            osum=nt or 0
-            if m:
-                di=int(f"{m.group(3)}{m.group(2)}{m.group(1)}"); iso=f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-                orderStack[lvl]=(di,iso,name.split('от')[0].replace('Заказ клиента','').strip(),osum)
+        parent=stack.get(lvl-1)
+        if _isdoc(name):
+            if not _isdoc(parent or ''):        # верхний документ компании (Заказ/Реализация/Комиссия…)
+                comp_name=parent or stack.get(1) or 'Прочее'
+                _cl=comp_name.lower()                         # маркетплейсы: канал СЕТИ, но не показывать как «компанию»
+                if 'интернет решения' in _cl or '(озон)' in _cl or 'ozon' in _cl: comp_name='OZON (маркетплейс)'
+                elif 'вайлдберриз' in _cl or 'wildberries' in _cl: comp_name='Wildberries (маркетплейс)'
+                reg,fil,chan=geo_for(comp_name)
+                if comp_name.strip().lower().startswith('частное лицо'):
+                    comp_name=comp_name+' · '+reg   # не склеивать одноимённых по разным регионам
+                m=_rx.search(name)
+                di=int(f"{m.group(3)}{m.group(2)}{m.group(1)}") if m else 0
+                iso=f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else ''
+                orderStack[lvl]=(di,iso,name.split('от')[0].strip(),nt or 0,comp_name,reg,fil,chan)
+                clientRegion.setdefault(comp_name,reg); clientFilial.setdefault(comp_name,fil); clientChannel.setdefault(comp_name,chan)
+                # город и субъект — из структуры отчёта продаж (ветка «Россия»: округ→субъект→город→клиент)
+                _CL=lvl-1; _subj=''; _city=''
+                if stack.get(0)=='Россия':
+                    if _CL>=3: _subj=stack.get(2) or ''
+                    if _CL>=4: _city=stack.get(3) or ''
+                clientSubject.setdefault(comp_name,_subj); clientCity.setdefault(comp_name,_city)
                 if di>maxdate: maxdate=di
-                if iso>client_last[client]: client_last[client]=iso
-                client_orderhist[client].append({'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",
-                    'num':orderStack[lvl][2],'sum':round(osum),'qty':int(q or 0)})
-                # заказы в работе: заказ минус его реализации (только за текущий год)
-                if di//10000==CUR_YEAR:
-                    shipped=0.0; j=i+1; l=lvl
-                    while j<n and rows[j][0]>l and rows[j][1] is not None:
-                        if rows[j][1].lower().startswith('реализация'): shipped+=rows[j][5] or 0
-                        j+=1
-                    ns=osum-shipped
-                    if ns>1: inwork.append({'client':client,'order':orderStack[lvl][2],
-                        'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",'ordered':round(osum),
-                        'shipped':round(shipped),'not_shipped':round(ns)})
+                if iso and iso>client_last[comp_name]: client_last[comp_name]=iso
+                if low.startswith('заказ клиента'):
+                    client_orders[comp_name]+=1
+                    if m:
+                        client_orderhist[comp_name].append({'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",
+                            'num':name.split('от')[0].replace('Заказ клиента','').strip(),'sum':round(nt or 0),'qty':int(q or 0)})
+                        if di//10000==CUR_YEAR:
+                            shipped=0.0; j=i+1
+                            while j<n and rows[j][0]>lvl and rows[j][1] is not None:
+                                if rows[j][1].lower().startswith('реализация'): shipped+=rows[j][5] or 0
+                                j+=1
+                            ns=(nt or 0)-shipped
+                            if ns>1: inwork.append({'client':comp_name,'order':name.split('от')[0].replace('Заказ клиента','').strip(),
+                                'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",'ordered':round(nt or 0),
+                                'shipped':round(shipped),'not_shipped':round(ns)})
             continue
-        if _isdoc(name): continue
-        # товар-лист?
         nxt=rows[i+1][0] if i+1<n else -1
-        if nxt>lvl: continue     # есть дети — не лист
+        if nxt>lvl: continue
         if nt is None: continue
-        client=stack.get(1); reg=stack.get(0) or '(без региона)'
-        q=q or 0; net=nt
-        company['net']+=net; company['gross']+=(gr or 0); company['ret']+=(rt or 0); company['qty']+=q
-        b=brand_of(name,price); byBrand[b]+=net
-        regSales[reg]+=net
-        if client:
-            regClients[reg][client]+=net
-            client_net[client]+=net; client_qty[client]+=q
-            client_prod[client][name][0]+=q; client_prod[client][name][1]+=net
-        comp[name][0]+=q; comp[name][1]+=net
         co=cur_ord()
-        if co:
-            di=co[0]; yr=di//10000; ym=str(di)[:6]
-            yearMonth[ym]+=net
+        if not co: continue
+        if is_posm(name):                          # POSM/непродаваемое (каталоги, пакеты, буклеты) — исключаем из аналитики
+            posm_ct[0]+=1; posm_ct[1]+=(nt or 0); continue
+        di,iso,onum,osum,client,reg,fil,chan=co
+        q=q or 0; net=nt; b=brand_of(name,price)
+        company['net']+=net; company['gross']+=(gr or 0); company['ret']+=(rt or 0); company['qty']+=q
+        byBrand[b]+=net; regSales[reg]+=net; regClients[reg][client]+=net
+        client_net[client]+=net; client_qty[client]+=q
+        client_prod[client][name][0]+=q; client_prod[client][name][1]+=net
+        comp[name][0]+=q; comp[name][1]+=net
+        if di>0:
+            yr=di//10000; ym=str(di)[:6]; yearMonth[ym]+=net; ymGross[ym]+=(gr or 0); ymRet[ym]+=(rt or 0)
             cy=compYear[yr]; cy['net']+=net; cy['gross']+=(gr or 0); cy['ret']+=(rt or 0); cy['qty']+=q
-            brandYear[yr][b]+=net
-            if client: clientYear[client][yr]+=net
-            if net!=0 and client:
-                tx.append([di,ci(client),si(name),round(q,1),round(net)])
+            brandYear[yr][b]+=net; clientYear[client][yr]+=net
+            filSales[yr][fil]+=net; chanSales[yr][chan]+=net; filChanYear[yr][fil+'|'+chan]+=net
+            if net!=0: tx.append([di,ci(client),si(name,art),round(q,1),round(net)])
     inwork.sort(key=lambda x:-x['not_shipped'])
+    print(f"  исключено POSM/непродаваемого: {posm_ct[0]} строк, нетто {posm_ct[1]:,.0f} ₽")
     return dict(company=company,byBrand=dict(byBrand),regSales=dict(regSales),
         regClients={k:dict(v) for k,v in regClients.items()},clientRegion=clientRegion,
+        clientFilial=clientFilial,clientChannel=clientChannel,clientCity=clientCity,clientSubject=clientSubject,
         client_net=dict(client_net),client_qty=dict(client_qty),client_orders=dict(client_orders),
         client_last=dict(client_last),client_orderhist=dict(client_orderhist),
         client_prod={k:dict(v) for k,v in client_prod.items()},comp=dict(comp),
-        yearMonth=dict(yearMonth),clientYear={k:dict(v) for k,v in clientYear.items()},
+        yearMonth=dict(yearMonth),ymGross=dict(ymGross),ymRet=dict(ymRet),clientYear={k:dict(v) for k,v in clientYear.items()},
         compYear={y:dict(d) for y,d in compYear.items()},brandYear={y:dict(d) for y,d in brandYear.items()},
+        filSales={y:dict(d) for y,d in filSales.items()},chanSales={y:dict(d) for y,d in chanSales.items()},
+        filChanYear={y:dict(d) for y,d in filChanYear.items()},
         tx=tx,tx_clients=tx_clients,tx_cats=tx_cats,tx_skus=tx_skus,inwork=inwork,maxdate=maxdate)
 
 # ---------------- ОСТАТКИ (новый файл по сериям) ----------------
+STOCK_WAREHOUSE='Адресный Лакония ОПТ'   # склад для оборачиваемости/остатков (как в 1С). «Всего доступно» для допродажи считается по ВСЕМ складам (company_in_stock/wh)
 def load_stock():
     import openpyxl
     if not F_STOCK.exists(): print("  [!] нет файла остатков"); return {}
+    # уровни группировки: склад (level 0) → серия (level 1) → строки артикула
+    ns='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    levels={}
+    try:
+        with zipfile.ZipFile(F_STOCK).open('xl/worksheets/sheet1.xml') as fp:
+            for ev,el in ET.iterparse(fp,events=('end',)):
+                if el.tag==ns+'row':
+                    rr=int(el.get('r')); ol=el.get('outlineLevel'); levels[rr]=int(ol) if ol else 0; el.clear()
+    except Exception as e:
+        print("  [!] остатки: не прочитал уровни группировки:",e)
+    def wh_bucket(nm):
+        n=(nm or '').lower()
+        if 'лакония опт' in n: return 'Лакония ОПТ'
+        if 'лакония сети' in n: return 'Лакония СЕТИ'
+        if 'владивосток' in n or 'янковск' in n or 'мангут' in n: return 'Владивосток'
+        if 'москва' in n or 'лист ложистик' in n or 'гидд' in n: return 'Москва'
+        if 'новосибирск' in n: return 'Новосибирск'
+        if 'лакония' in n: return 'Лакония прочее'
+        return 'Прочее'
     wb=openpyxl.load_workbook(F_STOCK,read_only=True,data_only=True); ws=wb['Лист_1']
-    stock={}; r=0
+    num=lambda x:(x if isinstance(x,(int,float)) else 0)
+    # opt = по продажному складу (для оборачиваемости); comp/wh = по ВСЕМ складам (для «Всего доступно»)
+    agg=defaultdict(lambda:{'name':'','in_stock':0.0,'shipping':0.0,'reserved':0.0,'available':0.0,'incoming':0.0,
+                            'company':0.0,'wh':defaultdict(float)})
+    cur_sklad=None; r=0
     for v in ws.iter_rows(min_row=1,values_only=True):
         r+=1
-        if r<12: continue
-        art=v[0] if len(v)>0 else None; name=v[2] if len(v)>2 else None
-        if not art or not name: continue          # только строки уровня «Артикул»
-        a=str(art).strip()
-        g=lambda idx: (v[idx] if len(v)>idx and isinstance(v[idx],(int,float)) else 0)
-        stock[a]={'name':str(name).strip(),'in_stock':g(7),'shipping':g(8),
-                  'reserved':g(9),'available':g(10),'incoming':g(11)}
+        c0=v[0] if len(v)>0 else None; c2=v[2] if len(v)>2 else None; c5=v[5] if len(v)>5 else None
+        isart=bool(c0 and c2 and c5)                       # строка артикула: код + наименование + ед.изм
+        if c0 and not isart:                               # заголовок (склад/серия)
+            if levels.get(r,0)==0: cur_sklad=str(c0).strip()
+            continue
+        if isart:
+            a=str(c0).strip(); d=agg[a];
+            if not d['name']: d['name']=str(c2).strip()
+            q7=num(v[7])
+            d['company']+=q7                               # все склады
+            if q7: d['wh'][wh_bucket(cur_sklad)]+=q7
+            if cur_sklad==STOCK_WAREHOUSE:                 # только продажный склад
+                d['in_stock']+=q7; d['shipping']+=num(v[8]); d['reserved']+=num(v[9])
+                d['available']+=num(v[10]); d['incoming']+=num(v[11])
     wb.close()
-    print(f"  остатки: {len(stock)} артикулов")
+    stock={a:{'name':d['name'],'in_stock':round(d['in_stock'],1),'shipping':round(d['shipping'],1),
+              'reserved':round(d['reserved'],1),'available':round(d['available'],1),
+              'incoming':round(d['incoming'],1),'company_in_stock':round(d['company'],1),
+              'wh':{k:round(val,1) for k,val in d['wh'].items() if abs(val)>=0.5}} for a,d in agg.items()}
+    print(f"  остатки: оборачиваемость по «{STOCK_WAREHOUSE}», «Всего доступно» по всем складам — {len(stock)} артикулов")
     return stock
+
+# ---------------- СРОКИ ГОДНОСТИ (по сериям) ----------------
+def load_expiry(refiso):
+    import openpyxl
+    from datetime import datetime
+    if not F_EXPIRY.exists(): print("  [!] нет файла сроков годности"); return {}
+    ref=datetime(int(refiso[:4]),int(refiso[5:7]),int(refiso[8:]))
+    wb=openpyxl.load_workbook(F_EXPIRY,read_only=True,data_only=True); ws=wb['Лист_1']
+    def pdate(v):
+        if isinstance(v,datetime): return v
+        if isinstance(v,str):
+            m=re.match(r'(\d{2})\.(\d{2})\.(\d{4})',v.strip())
+            if m: return datetime(int(m.group(3)),int(m.group(2)),int(m.group(1)))
+        return None
+    batches=defaultdict(list); r=0
+    for v in ws.iter_rows(min_row=1,values_only=True):
+        r+=1
+        if r<11: continue
+        art=v[0] if len(v)>0 else None
+        if not art: continue
+        a=str(art).strip()
+        if 'лакония' in a.lower() or 'склад' in a.lower(): continue   # строка склада
+        d=pdate(v[9] if len(v)>9 else None)
+        qty=v[11] if len(v)>11 else None
+        if d is None: continue
+        q=qty if isinstance(qty,(int,float)) else 0
+        batches[a].append((d,q))
+    wb.close()
+    out={}
+    horizon=90
+    for a,bs in batches.items():
+        withq=sorted([(d,q) for d,q in bs if q>0])
+        exp=round(sum(q for d,q in withq if d<ref))
+        soon=round(sum(q for d,q in withq if ref<=d and (d-ref).days<=horizon))
+        nearest=withq[0][0] if withq else None
+        lst=[{'d':d.strftime('%d.%m.%Y'),'q':round(q),'st':('exp' if d<ref else('soon' if (d-ref).days<=horizon else 'ok'))} for d,q in withq]
+        out[a]={'nearest':nearest.strftime('%d.%m.%Y') if nearest else None,
+                'nearest_days':((nearest-ref).days if nearest else None),
+                'expired':exp,'soon':soon,'list':lst}
+    print(f"  сроки годности: {len(out)} артикулов с партиями")
+    return out
 
 # ---------------- CRM (ЦФО) ----------------
 def _cnorm(s):
@@ -299,7 +491,10 @@ def load_crm(client_names):
     if not files: print("  CRM: файлы не найдены (папка Регионы)"); return {}
     recs=[]
     for p in files:
-        rr=_parse_crm_file(p); recs+=rr
+        ok=p.stem if p.suffix=='.xls' else 'ЦФО'
+        rr=_parse_crm_file(p)
+        for r in rr: r['_okrug']=ok
+        recs+=rr
     # индекс: нормализованное имя -> запись (имя + юр.наименования + ФИО ИП)
     idx={}
     for rec in recs:
@@ -325,7 +520,7 @@ def load_crm(client_names):
             'address':rec['address'],'city':rec['city'],'subject':rec['subject'],'phone':phones,'email':emails,
             'site':rec['site'],'responsible':rec['responsible'],'category':rec['category'],
             'employees':rec['employees'],'contractNo':rec['contractNo'],'contractDate':rec['contractDate'],
-            'bank':rec['bank'],'crmId':rec['id']}
+            'bank':rec['bank'],'crmId':rec['id'],'okrug':rec.get('_okrug','')}
     print(f"  CRM: файлов {len(files)}, компаний {len(recs)}, сматчено {matched}/{len(client_names)}")
     return out
 
@@ -336,9 +531,12 @@ def _plan_block(row, ci):
        [ВЛ ОПТ, МСК ОПТ, МСК СЕТИ] (KRONbuild+Enki) + [ВЛ, МСК, МСК СЕТИ] (HEADROCK)."""
     c=[x if isinstance(x,(int,float)) else 0 for x in row[ci+1:ci+7]]
     if len(c)<6: return None
+    # c = [ВЛ ОПТ, МСК ОПТ, МСК СЕТИ (KRON+Enki)] + [ВЛ, МСК, МСК СЕТИ (HEADROCK)]
     return {'total':round(sum(c)),
-            'vl':round(c[0]+c[3]),               # Владивосток = ВЛ ОПТ + ВЛ
-            'msk':round(c[1]+c[2]+c[4]+c[5]),     # Москва = МСК ОПТ + МСК СЕТИ + МСК + МСК СЕТИ
+            'vl':round(c[0]+c[3]),               # Владивосток (ОПТ) = ВЛ ОПТ + ВЛ
+            'msk':round(c[1]+c[2]+c[4]+c[5]),     # Москва (всё)
+            'mskopt':round(c[1]+c[4]),            # Москва ОПТ = МСК ОПТ + МСК(HR)
+            'mskseti':round(c[2]+c[5]),           # Москва СЕТИ = МСК СЕТИ (обе марки)
             'kronenki':round(c[0]+c[1]+c[2]),     # KRONbuild+ENKI
             'headrock':round(c[3]+c[4]+c[5])}     # HEADROCK
 def load_plan():
@@ -349,7 +547,8 @@ def load_plan():
     # приоритет — сводный «Лист1» (там оба года и корректная разметка «Филиал»)
     sheets=(['Лист1'] if 'Лист1' in wb.sheetnames else [])+[s for s in wb.sheetnames if s.strip().isdigit()]
     def blank(): return {'months':{},'filials':{'Москва':{},'Владивосток':{}},
-                         'brands':{'headrock':{},'kronenki':{}},'annual':0}
+                         'brands':{'headrock':{},'kronenki':{}},
+                         'buckets':{'ОПТ Москва':{},'ОПТ Владивосток':{},'Сети':{}},'annual':0}
     for sn in sheets:
         for v in wb[sn].iter_rows(values_only=True):
             for ci,cell in enumerate(v):
@@ -368,10 +567,12 @@ def load_plan():
                     if mi in p['months']: continue
                     p['months'][mi]=b['total']; p['filials']['Москва'][mi]=b['msk']; p['filials']['Владивосток'][mi]=b['vl']
                     p['brands']['headrock'][mi]=b['headrock']; p['brands']['kronenki'][mi]=b['kronenki']
+                    p['buckets']['ОПТ Москва'][mi]=b['mskopt']; p['buckets']['ОПТ Владивосток'][mi]=b['vl']; p['buckets']['Сети'][mi]=b['mskseti']
     for yr,p in plan.items():
         p['annual']=sum(p['months'].values())
         p['filialAnnual']={k:sum(m.values()) for k,m in p['filials'].items()}
         p['brandAnnual']={k:sum(m.values()) for k,m in p['brands'].items()}
+        p['bucketAnnual']={k:sum(m.values()) for k,m in p['buckets'].items()}
     wb.close()
     yrs=", ".join(f"{y}: {plan[y]['annual']:,.0f}" for y in sorted(plan))
     print(f"  план: {yrs}")
@@ -424,6 +625,78 @@ def build_krs(S, stock, plan, crm, price):
     PREV=CUR-1
     maxd=str(S['maxdate']); refiso=f"{maxd[:4]}-{maxd[4:6]}-{maxd[6:]}" if len(maxd)==8 else f"{CUR}-12-31"
     refdt=date(int(refiso[:4]),int(refiso[5:7]),int(refiso[8:]))
+    expiry=load_expiry(refiso)
+    # ---- дозаполнение «Не распределён» из CRM-округа + разрезы филиал/канал ----
+    CRM_OKRUG={'УФО':('Уральский ФО','Владивосток'),'ДВФО':('Дальневосточный ФО','Владивосток'),
+        'Западная Сибирь':('Сибирский ФО (Запад)','Владивосток'),'Восточная Сибирь':('Сибирский ФО (Восток)','Владивосток'),
+        'ЦФО':('Центральный ФО','Москва'),'ЮФО':('Южный ФО','Москва'),'СЗФО':('Северо-Западный ФО','Москва'),
+        'СКФО':('Северо-Кавказский ФО','Москва'),'ПФО':('Поволжский ФО','Москва'),
+        'Москва и МО':('Москва','Москва'),'СНГ':('СНГ','Москва')}
+    cReg=dict(S['clientRegion']); cFil=dict(S['clientFilial']); cChan=dict(S['clientChannel'])
+    # CRM привязываем ПО ИНН (справочник _client_inn.xlsx); имя — только запасной матч
+    _cinn,_kont=load_kontur()
+    crmByInn={}
+    for _rec in crm.values():
+        _i=str((_rec or {}).get('inn') or '').strip()
+        if _i and _i not in crmByInn: crmByInn[_i]=_rec
+    def crm_of(nm):
+        _i=_cinn.get(nrm(nm))
+        if _i and _i in crmByInn: return crmByInn[_i]
+        return crm.get(_cid(nm)) or {}
+    filled=0
+    for nm in list(cReg):
+        if cReg[nm]=='Не распределён':
+            rc=crm_of(nm); ok=(rc or {}).get('okrug','')
+            if ok in CRM_OKRUG:
+                cReg[nm],cFil[nm]=CRM_OKRUG[ok]; filled+=1
+    SNG_REG={'Беларусь','Казахстан','Кыргызстан','СНГ'}
+    def bucket(nm):
+        if cChan.get(nm)=='СЕТИ': return 'Сети'
+        if cReg.get(nm) in SNG_REG: return 'СНГ'
+        f=cFil.get(nm)
+        if f=='Владивосток': return 'ОПТ Владивосток'
+        if f=='Москва': return 'ОПТ Москва'
+        return 'Не распределён'
+    print(f"  дозаполнено регионов из CRM: {filled}")
+    # ---- менеджер по клиенту (закрепление округ→менеджер; сети — без менеджера) ----
+    OKRUG_MGR={'Центральный ФО':'Сергей Сидоров','Северо-Западный ФО':'Сергей Сидоров',
+        'Поволжский ФО':'Семён Комиссаров','Южный ФО':'Семён Комиссаров',
+        'Дальневосточный ФО':'Александр Федотов','Сибирский ФО (Восток)':'Евгений Швайгерт',
+        'Сибирский ФО (Запад)':'Дмитрий Жигалов','Уральский ФО':'Михаил Гнипель'}
+    cMgr={}
+    for nm in cReg:
+        ch=cChan.get(nm); reg=cReg.get(nm)
+        if ch=='СЕТИ': cMgr[nm]=None; continue          # у сетей менеджеров не берём
+        if reg=='Москва':
+            resp=(crm_of(nm) or {}).get('responsible','').strip()
+            cMgr[nm]=resp if resp in ('Максим Чашников','Василий Димитрюк') else 'Не назначен'
+        elif reg in ('Беларусь','Казахстан','Кыргызстан','СНГ'): cMgr[nm]='Сергей Сидоров'
+        elif reg in OKRUG_MGR: cMgr[nm]=OKRUG_MGR[reg]
+        else: cMgr[nm]='Не назначен'
+    # ---- город/субъект по клиенту (ИЗ ПРОДАЖ: округ→субъект→город) ----
+    cCity=dict(S.get('clientCity',{})); cSubj=dict(S.get('clientSubject',{}))
+    # ---- конфликты: менеджер (список≠CRM), нет ИНН, нет CRM по ИНН ----
+    conflicts=[]
+    for nm in cReg:
+        if cChan.get(nm)=='СЕТИ': continue
+        inn=_cinn.get(nrm(nm)); rec=crm_of(nm); resp=(rec or {}).get('responsible','').strip(); mgr=cMgr.get(nm)
+        if not inn: conflicts.append([nm,'нет ИНН в справочнике','',''])
+        elif not rec: conflicts.append([nm,'нет записи CRM по ИНН',inn,''])
+        if mgr and mgr!='Не назначен' and resp and resp!=mgr:
+            conflicts.append([nm,'менеджер: список≠CRM',mgr,resp])
+    try:
+        import csv as _csv
+        with open(ROOT/'work'/'_conflicts.csv','w',encoding='utf-8-sig',newline='') as _f:
+            _w=_csv.writer(_f); _w.writerow(['Клиент','Тип','Список/ИНН','CRM'])
+            for _r in conflicts: _w.writerow(_r)
+    except Exception as _e: print('  [!] conflicts csv:',_e)
+    from collections import Counter as _Cc
+    print('  конфликты:',dict(_Cc(x[1] for x in conflicts)),'-> work/_conflicts.csv')
+    # CRM для карточки — пересобрана по ИНН; ключ = _cid имени из продаж (как ждёт карточка)
+    crmJoined={}
+    for nm in S['client_net']:
+        rec=crm_of(nm)
+        if rec: crmJoined[_cid(nm)]=rec
     # ---- каталог + ABC (по продажам) ----
     cat_items=sorted(((n,d) for n,d in comp.items() if d[1]>0), key=lambda x:-x[1][1])
     catalog=[]; name2cat={}
@@ -458,14 +731,25 @@ def build_krs(S, stock, plan, crm, price):
         if d2ord(t[0])>=cutoff:
             sk=S['tx_skus'][t[2]]; art=sk[0]
             if art and art!='—': recent_qty_art[art]+=t[3]
+    art_price=price.get('__art_price__',{})
     turn={}
     for art,s in stock.items():
         inst=s['in_stock'] or 0
         if inst<=0: continue
         perday=recent_qty_art.get(art,0)/TURN_WINDOW_DAYS
         dos=(inst/perday) if perday>0 else None
+        p1=art_price.get(art,0)
+        frozen=round(inst*p1)
+        ex=expiry.get(art,{})
+        exp_q=ex.get('expired',0); soon_q=ex.get('soon',0)
         turn[art]={'dos':(round(dos) if dos is not None else None),'in_stock':inst,
-                   'available':s['available'],'name':s['name'],
+                   'available':s['available'],'reserved':s.get('reserved',0),'incoming':s.get('incoming',0),
+                   'wh':s.get('wh',{}),'company_in_stock':s.get('company_in_stock',0),
+                   'sold':round(recent_qty_art.get(art,0)),'frozen':frozen,'name':s['name'],
+                   'exp_near':ex.get('nearest'),'exp_days':ex.get('nearest_days'),
+                   'exp_expired':exp_q,'exp_soon':soon_q,
+                   'exp_froz':round(exp_q*p1),'soon_froz':round(soon_q*p1),
+                   'batches':ex.get('list',[]),
                    'status':('dead' if dos is None else('short' if dos<30 else('slow' if dos>180 else 'ok')))}
     # ---- overview (текущий год + план + АППГ) ----
     o_cur=cy.get(CUR,{'net':0,'gross':0,'ret':0,'qty':0}); o_prev=cy.get(PREV,{'net':0})
@@ -484,24 +768,54 @@ def build_krs(S, stock, plan, crm, price):
     cur_month=int(maxd[4:6]) if len(maxd)==8 else 12
     prev_same=sum(ym.get(f"{PREV}{mi:02d}",0) for mi in range(1,cur_month+1))   # АППГ: те же месяцы прошлого года
     plan_ytd=sum(plancur.get('months',{}).get(mi,0) for mi in range(1,cur_month+1)) if plancur else None
+    # АППГ для героя: клиенты/заказы/штуки за ТЕ ЖЕ месяцы прошлого года (из истории заказов)
+    def _dm(ds):
+        try: p=ds.split('.'); return (int(p[2]),int(p[1]))
+        except: return (0,0)
+    _oc=_op=_uc=_up=0; _cc=set(); _cp=set()
+    for _cl,_hist in S['client_orderhist'].items():
+        if excluded(_cl): continue
+        for _h in _hist:
+            _y,_mo=_dm(_h.get('date',''))
+            if _mo<1 or _mo>cur_month: continue
+            if _y==CUR: _oc+=1; _uc+=_h.get('qty',0); _cc.add(_cl)
+            elif _y==PREV: _op+=1; _up+=_h.get('qty',0); _cp.add(_cl)
+    yoy={'sales':grow(o_cur['net'],prev_same),'clients':grow(len(_cc),len(_cp)),'orders':grow(_oc,_op),'units':grow(_uc,_up)}
+    # Обзор: категории/товары/регионы — ВСЁ за текущий год (CUR), чтобы совпадало с продажами года
+    _catnet=defaultdict(float); _prodnet=defaultdict(float); _regnet=defaultdict(float)
+    _cr=S.get('clientRegion',{})
+    for _t in S['tx']:
+        if _t[0]//10000!=CUR or _t[4]<=0: continue
+        _sk=S['tx_skus'][_t[2]]
+        _cn=S['tx_cats'][_sk[2]]
+        if _cn and _cn!='Без категории': _catnet[_cn]+=_t[4]
+        _prodnet[_sk[1]]+=_t[4]
+        _rg=_cr.get(S['tx_clients'][_t[1]])
+        if _rg and _rg!='Не распределён': _regnet[_rg]+=_t[4]
+    _cats_sorted=sorted(_catnet.items(),key=lambda x:-x[1])[:8]
+    _ctot=sum(v for _,v in _cats_sorted) or 1
+    overview_categories=[{'name':c,'sales':round(v),'share':round(v/_ctot*100,1)} for c,v in _cats_sorted]
+    overview_topproducts=[{'sku':(cat_art(n,price)[1] or '—'),'name':n,'abc':abc.get(n,'C'),'sales':round(v),
+        'stock':(stock.get(cat_art(n,price)[1] or '',{}) or {}).get('in_stock',0)}
+        for n,v in sorted(_prodnet.items(),key=lambda x:-x[1])[:10]]
+    overview_regions=[{'name':r,'value':round(v)} for r,v in sorted(_regnet.items(),key=lambda x:-x[1])]
     overview={'sales':round(o_cur['net']),'grossSales':round(o_cur['gross']),'returns':round(o_cur['ret']),
         'units':int(o_cur['qty']),'returnsRate':round(-o_cur['ret']/o_cur['gross']*100,2) if o_cur['gross'] else 0,
         'plan':plancur.get('annual'),'planYTD':round(plan_ytd) if plan_ytd else None,
         'planDone':round(o_cur['net']/plan_ytd*100,1) if plan_ytd else None,
         'growth':grow(o_cur['net'],prev_same),
         'clients':len(clients_cur),'orders':orders_cur,'avgOrder':round(o_cur['net']/orders_cur) if orders_cur else 0,
+        'yoy':yoy,
         'months':months,
         'branches':[{'id':'all','name':'Вся компания','sales':round(o_cur['net']),
             'plan':plancur.get('annual'),'growth':grow(o_cur['net'],o_prev.get('net',0)),
             'headrock':round(by.get(CUR,{}).get('HeadRock',0)),'kron':round(by.get(CUR,{}).get('KRONbuild',0)),
             'enki':round(by.get(CUR,{}).get('ENKI',0))}],
         'topClients':[{'name':n,'sales':round(v),'share':round(v/(o_cur['net'] or 1)*100,1)}
-            for n,v in sorted(clients_cur.items(),key=lambda x:-x[1])[:5]],
-        'topProducts':[{'sku':(cat_art(n,price)[1] or '—'),'name':n,'abc':abc.get(n,'C'),'sales':round(comp[n][1]),
-            'stock':(stock.get(cat_art(n,price)[1] or '',{}) or {}).get('in_stock',0)}
-            for n,_ in cat_items[:10]],
-        'categories':[{'name':c,'sales':round(sum(comp[n][1] for n in comp if cat_art(n,price)[0]==c)),
-            'share':0} for c in list(cat_total)[:8]]}
+            for n,v in sorted(clients_cur.items(),key=lambda x:-x[1])[:10]],
+        'topProducts':overview_topproducts,
+        'regions':overview_regions,
+        'categories':overview_categories}
     # ---- бренды (для salesDetail) ----
     brand_cur=by.get(CUR,{})
     salesDetail={'branches':{'moscow':{'name':'Вся компания','sales':round(o_cur['net']),'clients':len(clients_cur),
@@ -519,7 +833,7 @@ def build_krs(S, stock, plan, crm, price):
         'kron':{'name':'KRONbuild','sales':round(brand_cur.get('KRONbuild',0)),'clients':len(clients_cur),'orders':orders_cur,'avgOrder':overview['avgOrder'],'brands':[]},
         'enki':{'name':'ENKI','sales':round(brand_cur.get('ENKI',0)),'clients':len(clients_cur),'orders':orders_cur,'avgOrder':overview['avgOrder'],'brands':[]}}
     # ---- клиенты и карточки ----
-    clients_list=[]; clientDetail={}; clientAssort={}; clientRegion=S['clientRegion']
+    clients_list=[]; clientDetail={}; clientAssort={}; clientRegion=cReg
     A_set=set(A)
     for name in sorted(S['client_net'],key=lambda c:-S['clientYear'].get(c,{}).get(CUR,0)):
         if excluded(name): continue
@@ -554,26 +868,39 @@ def build_krs(S, stock, plan, crm, price):
             'potential':'Высокий' if len(gaps)>=100 else('Средний' if len(gaps)>=40 else 'Низкий'),'status':st,
             'avgCheck':round(rev_cur/ordn) if ordn else 0,'freq':ordn,'aGap':cov['A']['total']-cov['A']['buy'],
             'days':days})
-        # помесячно клиента (текущий год)
-        cmonth=defaultdict(float)
-        for t in S['tx']:
-            if t[1]<len(S['tx_clients']) and S['tx_clients'][t[1]]==name and str(t[0]).startswith(str(CUR)):
-                cmonth[int(str(t[0])[4:6])]+=t[4]
-        cmonths=[{'m':MN[mi-1],'cur':round(cmonth.get(mi,0)/1e6,3),'prev':None} for mi in range(1,13)]
+        # months/categories/abc/recommended пересчитывает clientByPeriod из tx при открытии карточки —
+        # в статике держим только лёгкую основу (иначе файл раздувается на мегабайты).
         clientDetail[cid]={'name':name,'manager':reg,'region':reg,'city':'—','segment':'—','status':st,
             'sales':round(rev_cur),'units':qty,'orders':ordn,'avgOrder':round(rev_cur/ordn) if ordn else 0,
             'last':last.replace('-','.') if last else '—','growth':grow(rev_cur,S['clientYear'].get(name,{}).get(PREV,0)),
-            'discount':None,'brands':[{'name':'HeadRock','sales':round(rev_cur),'share':100}],'months':cmonths,
-            'categories':cats,'abc':cov,'recommended':rec,
+            'discount':None,'brands':[{'name':'HeadRock','sales':round(rev_cur),'share':100}],'months':[],
+            'categories':[],'abc':cov,'recommended':[],
             'ordersHistory':[{'date':h['date'],'order':h['num'],'brand':'—','sum':h['sum'],'sku':h['qty'],
                 'discount':None,'status':'Из отчёта'} for h in hist_cur[-12:]],'buySku':len(bought)}
         clientAssort[cid]={str(name2cat[n]):round(prods[n][1]) for n in bought if n in name2cat}
     # ---- регионы ----
-    regionsData={};
-    for reg,cls in S['regClients'].items():
-        cls={n:v for n,v in cls.items() if not excluded(n)}
-        lst=sorted([{'name':n,'sales':round(v)} for n,v in cls.items()],key=lambda x:-x['sales'])
-        regionsData[reg]={'sales':round(sum(cls.values())),'clients':len(cls),'list':lst}
+    regionsData={}; _rc=defaultdict(lambda:defaultdict(float))
+    for nm,net in S['client_net'].items():
+        if excluded(nm): continue
+        _rc[cReg.get(nm,'Не распределён')][nm]+=net
+    for reg,cls in _rc.items():
+        lst=sorted([{'name':n,'sales':round(v)} for n,v in cls.items() if v>0],key=lambda x:-x['sales'])
+        regionsData[reg]={'sales':round(sum(cls.values())),'clients':len(lst),'list':lst}
+    # факт по разрезам (ОПТ Москва / ОПТ Владивосток / СНГ / Сети) по годам + план
+    factB=defaultdict(lambda:defaultdict(float))
+    for t in S['tx']:
+        nm=S['tx_clients'][t[1]]; factB[t[0]//10000][bucket(nm)]+=t[4]
+    salesFilial={}; salesFilial3={}
+    for y in sorted(set([CUR,PREV,CUR-2])):
+        pl=plan.get(y,{}).get('bucketAnnual',{})
+        f=lambda bk: round(factB.get(y,{}).get(bk,0))
+        salesFilial[str(y)]={bk:{'fact':f(bk),'plan':(round(pl[bk]) if bk in pl else None)}
+                             for bk in ('ОПТ Москва','ОПТ Владивосток','СНГ','Сети')}
+        # 3 филиала: Москва = ОПТ Москва + СНГ; Владивосток; Сети
+        salesFilial3[str(y)]={
+            'Москва':{'fact':f('ОПТ Москва')+f('СНГ'),'plan':(round(pl['ОПТ Москва']) if 'ОПТ Москва' in pl else None)},
+            'Владивосток':{'fact':f('ОПТ Владивосток'),'plan':(round(pl['ОПТ Владивосток']) if 'ОПТ Владивосток' in pl else None)},
+            'Сети':{'fact':f('Сети'),'plan':(round(pl['Сети']) if 'Сети' in pl else None)}}
     foreign=[r for r in S['regSales'] if r in ('Беларусь','Казахстан','Кыргызстан')]
     regionsFull=[{'name':r,'sales':round(v)} for r,v in sorted(S['regSales'].items(),key=lambda x:-x[1])]
     # ---- остатки/дефицит ----
@@ -584,6 +911,9 @@ def build_krs(S, stock, plan, crm, price):
          for a,s in stock.items() if s['available']<=0]
     low.sort(key=lambda x:x['available']); low=low[:40]
     # ---- сборка ----
+    # Контур.Фокус: ИНН по клиенту (имя из 1С — только ключ к справочнику; далее всё по ИНН); _cinn/_kont уже загружены выше
+    clientInn={cn:_cinn[nrm(cn)] for cn in S['client_net'] if nrm(cn) in _cinn}
+    print(f"  Контур: ИНН сопоставлен {len(clientInn)} клиентам из {len(S['client_net'])}")
     KRS={
       'meta':{'prototype':True,'note':f'Пересобрано rebuild.py из актуальных Excel. Вся компания, {CUR} (АППГ {PREV}).',
         'sourceCoverage':{'period':f'{CUR} (АППГ {PREV})','scope':'Вся компания / все бренды',
@@ -601,23 +931,32 @@ def build_krs(S, stock, plan, crm, price):
         'revenue_share':{k:round(v/(tot_rev or 1)*100,1) for k,v in rev_by.items()},'total_rev':round(tot_rev),
         'total_sku':len(catalog),'nclients':nclients,'a_list':a_list,'reserve':reserve},
       'tx':S['tx'],'txClients':S['tx_clients'],'txCats':S['tx_cats'],'txSkus':S['tx_skus'],'catTotal':dict(cat_total),
+      'ym':S['yearMonth'],'ymGross':S['ymGross'],'ymRet':S['ymRet'],'geoRef':load_geo(),'ruMap':load_rumap(),
       'regionsData':regionsData,'clientRegion':clientRegion,'foreignRegions':foreign or ['Беларусь'],
+      'clientFilial':cFil,'clientChannel':cChan,'clientManager':cMgr,'clientCity':cCity,'clientSubject':cSubj,'salesFilial':salesFilial,'salesFilial3':salesFilial3,
       'refDate':refiso,'dataAsOf':refiso,'dataAsOfHuman':refiso[8:]+'.'+refiso[5:7]+'.'+refiso[:4],
-      'catalog':catalog,'clientAssort':clientAssort,'crm':crm,
+      'catalog':catalog,'clientAssort':clientAssort,'crm':crmJoined,
+      'clientInn':clientInn,'kontur':_kont,
       'turnover':turn,'plan':{str(y):plan[y] for y in plan},
     }
     print(f"  исключено служебных/нулевых: {n_excluded}")
     return KRS
 
-def inject(KRS):
-    src=TEMPLATE_SRC.read_text(encoding='utf-8')
+def _inject_into(src_path, out_path, KRS):
+    src=src_path.read_text(encoding='utf-8')
     key='window.KRS_DATA = '
     i=src.find(key)
-    if i<0: raise SystemExit('слот window.KRS_DATA не найден в шаблоне')
+    if i<0: raise SystemExit(f'слот window.KRS_DATA не найден в шаблоне {src_path.name}')
     j=i+len(key); _,rel=json.JSONDecoder().raw_decode(src[j:]); end=j+rel
     out=src[:j]+json.dumps(KRS,ensure_ascii=False)+src[end:]
-    OUT.write_text(out,encoding='utf-8')
-    print(f"  [OK] {OUT.name} пересобран ({len(out):,} байт)")
+    out_path.write_text(out,encoding='utf-8')
+    print(f"  [OK] {out_path.name} пересобран ({len(out):,} байт)")
+
+def inject(KRS):
+    _inject_into(TEMPLATE_SRC, OUT, KRS)
+    proto_src=ROOT/"Kairos_proto_template.html"
+    if proto_src.exists():
+        _inject_into(proto_src, ROOT/"Kairos_dashboard_proto.html", KRS)
 
 if __name__=='__main__':
     print("Читаю источники…")

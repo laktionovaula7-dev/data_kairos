@@ -96,8 +96,8 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   const badgeDelta=(v,text='к аналогичному периоду')=>v===null||v===undefined?`${dataTag('missing','нет АППГ')}`:`${delta(v)} <span class="muted">${text}</span>`;
 
   function topbar(){
-    const nav=[['overview','Обзор'],['sales','Продажи'],['regions','Бизнес-регионы'],['managers','Менеджеры'],['clients','Клиенты'],['logistics','Логистика и остатки'],['signals','Товарные сигналы']];
-    return `<header class="topbar"><div class="brand"><span class="company-word">Кайрос</span><span class="analytics-word">Аналитика</span></div><nav class="nav">${nav.map(([id,l])=>`<button class="${state.page===id?'active':''}" data-nav="${id}">${l}</button>`).join('')}</nav><div class="asof"><span class="asof-dot"></span>Данные обновлены: <b>${D.dataAsOfHuman||'—'}</b><button class="asof-btn" id="btnRefresh" title="Перечитать данные">⟳ Обновить</button></div></header>`;
+    const nav=[['overview','Обзор'],['sales','Продажи'],['regions','Бизнес-регионы'],['managers','Менеджеры'],['clients','Клиенты'],['abc','ABC-анализ'],['turnover','Остатки и сроки'],['assort','Развитие ассортимента'],['logistics','Логистика и остатки'],['signals','Товарные сигналы']];
+    return `<header class="topbar"><div class="brand"><span class="company-word">Кайрос</span><span class="analytics-word">Аналитика</span></div><nav class="nav">${nav.map(([id,l])=>`<button class="${state.page===id?'active':''}" data-nav="${id}">${l}</button>`).join('')}</nav></header>`;
   }
   const pageHead=(title,sub,crumb='',actions='')=>`${crumb?`<div class="breadcrumb">${crumb}</div>`:''}<div class="page-head"><div><h1>${title}</h1><div class="page-sub">${sub}</div></div>${actions?`<div class="page-actions">${actions}</div>`:''}</div>${globalFilters()}`;
   const globalFilters=()=>{
@@ -130,72 +130,301 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   }
   function gauge(actual,plan){const p=Math.min(100,planPct(actual,plan)); const angle=180*p/100; const r=76,cx=100,cy=100; const polar=a=>{const rad=(Math.PI/180)*a;return [cx+r*Math.cos(rad),cy-r*Math.sin(rad)]}; const [x1,y1]=polar(180),[x2,y2]=polar(180-angle); const large=angle>180?1:0; return `<div class="gauge"><svg viewBox="0 0 200 110"><path d="M 24 100 A 76 76 0 0 1 176 100" fill="none" stroke="#eef0f3" stroke-width="18" stroke-linecap="round"/><path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="#f56a1c" stroke-width="18" stroke-linecap="round"/></svg><div class="gauge-value">${pct(p)}</div><div class="gauge-label">выполнение плана</div></div>`}
 
-  function overviewPage(){const o=D.overview;const _B=(D.salesDetail&&D.salesDetail.brands)||{};const _hr=(_B.headrock&&_B.headrock.sales)||0,_kr=(_B.kron&&_B.kron.sales)||0,_en=(_B.enki&&_B.enki.sales)||0;const _RG=D.regionsData||{};const _rl=Object.keys(_RG).map(r=>({name:r,value:_RG[r].sales})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);return `${pageHead('Обзор продаж Кайрос','Вся компания, все бренды. Период выбирается справа вверху.')}${notice()}<div class="kpi-grid">${kpi('Продажи нетто, ₽',fmtMoney(o.sales),'sales',`Продажи ${fmtMoney(o.grossSales)} · возвраты ${fmtMoney(o.returns)}`,'','source')}${kpi('Количество, шт.',o.units.toLocaleString('ru-RU'),'box','единицы хранения','','source')}${kpi('Выполнение плана',o.planDone!=null?pct(o.planDone):(o.plan?pct(+(o.sales/o.plan*100).toFixed(1)):'—'),'target',o.planYTD?('план YTD '+fmtMoney(o.planYTD)):(o.plan?('годовой план '+fmtMoney(o.plan)):'нет плана'),'',o.plan?'source':'missing')}${kpi('Δ к прошлому году',o.growth!=null?delta(o.growth):'—','trend','к тем же месяцам прошлого года','',o.growth!=null?'source':'missing')}${kpi('Уникальные партнеры',o.clients.toLocaleString('ru-RU'),'users','по сводной части отчета','','source')}${kpi('Заказы',o.orders.toLocaleString('ru-RU'),'cart',`Средний заказ ${fmtMoney(o.avgOrder)}`,'','source')}</div>
-  <div class="hero-grid"><div class="card chart-card"><div class="card-title">Продажи по месяцам ${dataTag('source')}<span class="right">факт · план · АППГ</span></div>${lineBars(o.months,[['fact','Факт','fact'],['plan','План','plan'],['prev','АППГ','prev']])}</div><div class="card pad"><div class="card-title">Выполнение плана ${o.plan?dataTag('source'):dataTag('missing')}</div>${o.plan?gauge(o.sales,o.planYTD||o.plan)+`<div style="text-align:center;font-size:12px;color:#727987;margin-top:6px">Факт ${fmtMoney(o.sales)} из плана ${fmtMoney(o.planYTD||o.plan)}${o.planYTD?' (YTD)':' (год)'}</div>`:missingBlock('Нет данных по плану','План на этот период не найден.')}</div></div>
-  <div class="card branch-card"><div class="branch-top"><span class="branch-title">Вся компания — по брендам</span>${dataTag('source')}<button class="ghost" data-sales-branch="moscow">Детализация →</button></div><div class="brand-summary"><div class="mini"><div class="mini-label">HeadRock</div><div class="mini-value">${fmtMoney(_hr)}</div></div><div class="mini"><div class="mini-label">KRONbuild</div><div class="mini-value">${fmtMoney(_kr)}</div></div><div class="mini"><div class="mini-label">ENKI</div><div class="mini-value">${fmtMoney(_en)}</div></div><div class="mini"><div class="mini-label">Возвраты</div><div class="mini-value">${fmtMoney(o.returns)}</div><div class="mini-label">${pct(o.returnsRate)} от продаж</div></div></div></div>
-  <div class="dashboard-grid">${sectionCard('Бренды',`<div class="brand-list"><div class="brand-line"><span>${brandLogo('headrock','HeadRock')}</span><b>${fmtMoney(_hr)}</b><span>${dataTag('source')}</span></div><div class="brand-line"><span>${brandLogo('kron','KRONbuild')}</span><b>${fmtMoney(_kr)}</b><span>${dataTag('source')}</span></div><div class="brand-line"><span>${brandLogo('enki','ENKI')}</span><b>${fmtMoney(_en)}</b><span>${dataTag('source')}</span></div></div>`)}${sectionCard('Категории',hbars(o.categories.map(x=>({name:x.name,value:x.share})),'value'),dataTag('source'))}${sectionCard('Бизнес-регионы',_rl.length?hbars(_rl,'value',fmtMoney):missingBlock('Нет данных по регионам','—'),dataTag('source'))}</div>
-  <div class="grid-3">${sectionCard('ТОП-5 клиентов',`<table class="data-table"><thead><tr><th>Клиент</th><th class="num">Продажи</th><th class="num">Доля</th></tr></thead><tbody>${o.topClients.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td><td class="num">${pct(x.share)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('ТОП-5 товаров',`<table class="data-table"><thead><tr><th>Товар</th><th class="num">Продажи</th></tr></thead><tbody>${o.topProducts.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td></tr>`).join('')}</tbody></table>`,dataTag('source'))}${sectionCard('Рост к прошлому году',`<div style="padding:14px 4px"><div style="font-size:32px;font-weight:800;margin-bottom:4px">${o.growth!=null?delta(o.growth):'—'}</div><div style="font-size:13px;color:#727987">Продажи ${fmtMoney(o.sales)} против ${fmtMoney(Math.round(o.sales/(1+((o.growth||0)/100))))} за тот же период прошлого года.</div></div>`,o.growth!=null?dataTag('source'):dataTag('missing'))}</div>`}
-
-  function salesPage(){const isBranch=state.salesMode==='branch';const obj=isBranch?D.salesDetail.branches[state.branch]:D.salesDetail.brands[state.brand];const title=isBranch?`Филиал — ${obj.name}`:`Бренд — ${obj.name}`;const missing=!!obj.missing || obj.sales===null;const chooser=isBranch?`<div class="segment"><button class="seg-btn ${state.branch==='moscow'?'active':''}" data-branch="moscow">Москва</button><button class="seg-btn ${state.branch==='vlad'?'active':''}" data-branch="vlad">Владивосток</button></div>`:`<div class="segment"><button class="seg-btn ${state.brand==='headrock'?'active':''}" data-brand="headrock">HeadRock</button><button class="seg-btn ${state.brand==='kron'?'active':''}" data-brand="kron">KRONbuild</button><button class="seg-btn ${state.brand==='enki'?'active':''}" data-brand="enki">ENKI</button></div>`;
-    if(missing)return `${pageHead(title,isBranch?'Аналитика выбранного филиала.':'Аналитика выбранного бренда.','Продажи')}<div class="toolbar"><div class="segment"><button class="seg-btn ${isBranch?'active':''}" data-sales-mode="branch">Филиал</button><button class="seg-btn ${!isBranch?'active':''}" data-sales-mode="brand">Бренд</button></div><span class="spacer"></span>${chooser}</div><div class="card pad">${missingBlock('Для выбранного разреза нет данных',isBranch?'Текущие Excel покрывают только Москва / HeadRock. Нужна выгрузка по Владивостоку.':'Текущие Excel покрывают только HeadRock. Нужна выгрузка продаж и ABC по этому бренду.')}</div>`;
-    return `${pageHead(title,isBranch?'Аналитика филиала на доступном покрытии.':'Детальная аналитика бренда на доступном покрытии.','Продажи')}<div class="toolbar"><div class="segment"><button class="seg-btn ${isBranch?'active':''}" data-sales-mode="branch">Филиал</button><button class="seg-btn ${!isBranch?'active':''}" data-sales-mode="brand">Бренд</button></div><span class="spacer"></span>${chooser}</div>
-    <div class="kpi-grid">${kpi('Продажи, ₽',fmtMoney(obj.sales),'sales','нетто','','source')}${kpi('План, ₽','—','target','Нужен источник планов','','missing')}${kpi('Выполнение плана','—','percent','Нужен источник планов','','missing')}${kpi('Клиенты',obj.clients?.toLocaleString('ru-RU')||D.overview.clients.toLocaleString('ru-RU'),'users','по текущему отчету','','source')}${kpi('Заказы',(obj.orders??D.overview.orders).toLocaleString('ru-RU'),'cart','по текущему отчету','','source')}${kpi('Средний заказ',fmtMoney(obj.avgOrder??D.overview.avgOrder),'coins','расчет','','source')}</div>
-    <div class="grid-2eq"><div class="card pad"><div class="card-title">Бренды / покрытие ${dataTag('partial')}</div>${isBranch?`<div class="brand-list">${obj.brands.map(b=>`<div class="brand-line"><span>${brandLogo(b.id,b.name)}</span><b>${fmtMoney(b.fact)}</b><span>${b.fact===null?dataTag('missing'):dataTag('source')}</span></div>`).join('')}</div>`:`<div class="brand-list"><div class="brand-line"><span>${brandLogo(state.brand,obj.name)}</span><b>${fmtMoney(obj.sales)}</b><span>${dataTag('source')}</span></div></div>`}</div><div class="card chart-card"><div class="card-title">Продажи по месяцам ${dataTag('source')}</div>${lineBars(D.overview.months,[['fact','Факт','fact']],true)}</div></div>
-    <div class="grid-2eq">${sectionCard('Категории HeadRock / инструмент',hbars(D.salesDetail.categories.map(x=>({name:x.name,value:x.sales})),'value',fmtMoney),dataTag('source','ABC отчет'))}${sectionCard('ABC товарной матрицы',`<div class="abc-grid"><div class="abc-card"><small>A-позиции · ${(D.abcDetail&&D.abcDetail.revenue_share.A)||80}% выручки</small><b>${D.abcSummary.counts.A||0}</b><div class="progress" style="margin-top:8px"><span style="width:${(D.abcDetail&&D.abcDetail.revenue_share.A)||80}%"></span></div></div><div class="abc-card"><small>B-позиции · ${(D.abcDetail&&D.abcDetail.revenue_share.B)||15}% выручки</small><b>${D.abcSummary.counts.B||0}</b><div class="progress" style="margin-top:8px"><span style="width:${(D.abcDetail&&D.abcDetail.revenue_share.B)||15}%;background:#c9871b"></span></div></div><div class="abc-card"><small>C-позиции · ${(D.abcDetail&&D.abcDetail.revenue_share.C)||5}% выручки</small><b>${D.abcSummary.counts.C||0}</b><div class="progress" style="margin-top:8px"><span style="width:${(D.abcDetail&&D.abcDetail.revenue_share.C)||5}%;background:#9b978d"></span></div></div><div class="abc-card"><small>Всего SKU с ABC</small><b>${D.abcSummary.totalSku}</b></div></div><div style="font-size:11px;color:#727987;margin-top:10px">Правило: A — товары, дающие 80% выручки; B — следующие 15%; C — последние 5%. Источник: ABC-отчёт по HeadRock.</div>${D.abcDetail?`<div style="margin-top:16px"><div class="segment" style="margin-bottom:10px"><button class="seg-btn active" data-abctab="loco">Локомотивы (топ A)</button><button class="seg-btn" data-abctab="reserve">Резерв допродаж</button></div><div id="abcLoco"><table class="data-table abc-tbl"><thead><tr><th style="width:130px">Артикул</th><th>Товар</th><th class="num" style="width:110px">Выручка</th></tr></thead><tbody>${D.abcDetail.a_list.map(x=>`<tr><td>${esc(x.article)}</td><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.rev)}</td></tr>`).join('')}</tbody></table></div><div id="abcReserve" style="display:none"><table class="data-table abc-tbl"><thead><tr><th>Товар</th><th class="num" style="width:120px">Не берут</th><th class="num" style="width:150px">Выручка по компании</th></tr></thead><tbody>${D.abcDetail.reserve.map(x=>`<tr><td>${esc(x.name)}</td><td class="num"><b>${x.nonbuyers}</b> / ${D.abcDetail.nclients}</td><td class="num">${fmtMoney(x.rev)}</td></tr>`).join('')}</tbody></table></div></div>`:''}`,dataTag('source'))}</div>
-    <div class="grid-2eq">${sectionCard('ТОП товаров / SKU',productsTable(D.salesDetail.products.slice(0,10)),dataTag('source'))}${sectionCard('Рост / просадки',missingBlock('Нет АППГ','Для динамики SKU нужен аналогичный период прошлого года.'),dataTag('missing'))}</div>`}
+  function ov2Assets(){
+    if(typeof document==='undefined'||!document.head)return;
+    if(!document.getElementById('ov2-fonts')){var l=document.createElement('link');l.id='ov2-fonts';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap';document.head.appendChild(l);}
+    if(!document.getElementById('ov2-style')){var s=document.createElement('style');s.id='ov2-style';s.textContent=`
+.ov2{--ink:#2A2A2A;--paper:#fff;--red:#C7001F;--yellow:#FDCF08;--sand:#CAC4B8;--line:#ECEAE4;--line2:#F4F2EC;--panel:#FBFAF7;--mut:#8b8d90;font-family:'Montserrat',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--ink)}
+.ov2 *{box-sizing:border-box}
+.ov2 .disp{font-family:'Unbounded','Montserrat','Segoe UI',sans-serif;font-feature-settings:'tnum';font-variant-numeric:tabular-nums}
+.ov2 ::selection{background:var(--yellow);color:var(--ink)}
+.ov2 :focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.ov2 .scroll::-webkit-scrollbar{width:10px;height:10px}
+.ov2 .scroll::-webkit-scrollbar-thumb{background:#DAD6CD;border-radius:8px;border:2px solid #fff}
+.ov2 .scroll::-webkit-scrollbar-track{background:transparent}
+.ov2 .scroll{scrollbar-width:thin;scrollbar-color:#DAD6CD transparent}
+.ov2 .o-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin:4px 0 16px;flex-wrap:wrap}
+.ov2 .o-title{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:800;font-size:28px;letter-spacing:-.5px;line-height:1.05;margin:0}
+.ov2 .o-title span{color:var(--mut);font-weight:600}
+.ov2 .o-sub{font-size:12.5px;color:var(--mut);margin-top:9px;line-height:1.5;max-width:70ch}
+.ov2 .o-scope{display:flex;gap:8px;flex-wrap:wrap}
+.ov2 .chip{background:#F3F1EC;border:1px solid #E6E3DC;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:#5c5e61}
+.ov2 .cockpit{display:grid;grid-template-columns:minmax(300px,37%) 1fr;gap:16px;margin-bottom:16px}
+.ov2 .flagship{position:relative;overflow:hidden;border-radius:22px;background:var(--ink);color:#fff;padding:24px 26px;display:flex;flex-direction:column}
+.ov2 .flagship::after{content:'';position:absolute;right:-80px;top:-70px;width:300px;height:300px;background:radial-gradient(circle at 34% 34%,rgba(253,207,8,.5),rgba(199,0,31,.26) 54%,transparent 72%);pointer-events:none}
+.ov2 .flagship::before{content:'';position:absolute;left:0;right:0;top:0;bottom:0;background:repeating-linear-gradient(122deg,transparent 0 46px,rgba(253,207,8,.05) 46px 47px);pointer-events:none}
+.ov2 .flagship>*{position:relative;z-index:1}
+.ov2 .fl-brand{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.ov2 .klogo{width:26px;height:26px;border-radius:7px;background:var(--yellow);color:#111;font-family:'Unbounded','Segoe UI',sans-serif;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;line-height:1}
+.ov2 .fl-brand b{font-size:13px;font-weight:700;letter-spacing:.02em}
+.ov2 .fl-brand span{font-size:11px;color:rgba(255,255,255,.5)}
+.ov2 .fl-num{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:800;font-size:46px;line-height:1;letter-spacing:-.02em}
+.ov2 .fl-cap{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:9px}
+.ov2 .fl-sub{font-size:12.5px;color:rgba(255,255,255,.72);margin-top:10px}
+.ov2 .fl-div{height:1px;background:rgba(255,255,255,.13);margin:18px 0 16px}
+.ov2 .fl-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 14px;margin-top:auto}
+.ov2 .fl-rv{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:700;font-size:19px;line-height:1.05}
+.ov2 .fl-rl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:4px}
+.ov2 .up{color:var(--yellow)}.ov2 .down{color:#ff6b6b}
+.ov2 .board{border:1px solid var(--line);border-radius:22px;background:var(--paper);padding:22px 24px;display:flex;flex-direction:column}
+.ov2 .board-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.ov2 .board-cap{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);font-weight:600}
+.ov2 .board-pct{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:800;font-size:clamp(46px,6vw,80px);line-height:.92;letter-spacing:-.02em;margin-top:6px}
+.ov2 .board-right{text-align:right;padding-top:2px}
+.ov2 .schip{display:inline-block;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700}
+.ov2 .schip.behind{background:rgba(199,0,31,.1);color:var(--red)}
+.ov2 .schip.ahead{background:rgba(253,207,8,.22);color:#8a6d00}
+.ov2 .board-d{font-size:12.5px;color:var(--mut);margin-top:8px;line-height:1.5}
+.ov2 .board-d b{color:var(--ink)}
+.ov2 .track{position:relative;height:32px;background:#F1EEE8;border-radius:10px;margin:16px 0 6px;overflow:hidden}
+.ov2 .track-fill{position:absolute;left:0;top:0;height:100%;border-radius:10px;background:linear-gradient(90deg,#FDCF08,#F2792B 52%,#C7001F);width:calc(var(--v,0)*100%);animation:ov2grow 1s cubic-bezier(.16,1,.3,1) both}
+.ov2 .track-tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(42,42,42,.12)}
+.ov2 .track-today{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ink);left:calc(var(--t,1)*100%)}
+.ov2 .track-today::after{content:attr(data-l);position:absolute;top:-16px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:600;color:var(--ink)}
+.ov2 .track-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+@keyframes ov2grow{from{width:0}}
+.ov2 .board-fils{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.ov2 .bf{border:1px solid var(--line);border-radius:13px;padding:11px 13px;background:var(--panel)}
+.ov2 .bf .bfn{font-size:12px;font-weight:700}
+.ov2 .bf .bfv{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:700;font-size:16px;margin:6px 0 8px}
+.ov2 .miniprog{height:6px;background:#EAE6DE;border-radius:5px;overflow:hidden}
+.ov2 .miniprog>span{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#FDCF08,#C7001F);width:calc(var(--v,0)*100%);animation:ov2grow .9s cubic-bezier(.16,1,.3,1) both}
+.ov2 .bf .bfp{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);margin-top:7px}
+.ov2 .board-foot{display:flex;justify-content:flex-end;margin-top:14px}
+.ov2 .link{display:inline-flex;align-items:center;gap:6px;background:#F3F1EC;border:none;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;color:#2f3032;cursor:pointer;font-family:'Montserrat',sans-serif}
+.ov2 .link:hover{background:#EAE7E0}
+.ov2 .link svg{width:13px;height:13px}
+.ov2 .card2{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:18px 20px;margin-bottom:16px}
+.ov2 .ct{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px;margin-bottom:14px}
+.ov2 .ct .r{font-weight:500;font-size:12px;color:var(--mut)}
+.ov2 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.ov2 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:4px}
+.ov2 .legend{display:flex;gap:16px;margin-bottom:6px;font-size:11.5px;color:#6c6e71}
+.ov2 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.ov2 .hb{display:grid;grid-template-columns:118px 1fr 84px;align-items:center;gap:10px;margin:10px 0;font-size:12.5px}
+.ov2 .hb>div:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov2 .hb .bar{height:9px;background:#EEEBE4;border-radius:6px;overflow:hidden}
+.ov2 .hb .bar>span{display:block;height:100%;background:var(--ink);border-radius:6px;width:calc(var(--v,0)*100%);animation:ov2grow .9s cubic-bezier(.16,1,.3,1) both}
+.ov2 .hb .bar.y>span{background:var(--yellow)}
+.ov2 .hb .v{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.ov2 .brow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line2)}
+.ov2 .brow:last-child{border-bottom:none}
+.ov2 .bmark{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:13px}
+.ov2 .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+.ov2 table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ov2 th{text-align:left;color:var(--mut);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+.ov2 td{padding:10px 6px;border-bottom:1px solid var(--line2)}
+.ov2 td.num,.ov2 th.num{text-align:right;font-variant-numeric:tabular-nums}
+.ov2 tr:last-child td{border-bottom:none}
+.ov2 tr.clk{cursor:pointer}.ov2 tr.clk:hover td{background:var(--panel)}
+.ov2 .pill{background:#F3F1EC;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600;color:#5c5e61}
+.ov2 .empty{padding:22px 8px;color:var(--mut);font-size:12.5px;text-align:center}
+@media(max-width:900px){.ov2 .cockpit{grid-template-columns:1fr}.ov2 .grid3,.ov2 .grid2,.ov2 .board-fils{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.ov2 .track-fill,.ov2 .miniprog>span,.ov2 .hb .bar>span{animation:none}}
+`;document.head.appendChild(s);}
+  }
+  function ov2Arrow(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';}
+  function ov2Bars(months){
+    var W=760,H=200,pl={l:30,r:8,t:8,b:24},iw=W-pl.l-pl.r,ih=H-pl.t-pl.b;
+    var keys=[['fact','#2A2A2A'],['plan','#FDCF08'],['prev','#CAC4B8']];
+    var vals=[];months.forEach(function(d){keys.forEach(function(k){vals.push(+d[k[0]]||0);});});
+    var mx=Math.max.apply(null,vals.concat([1]))*1.14;
+    var gw=iw/Math.max(months.length,1),bw=Math.max(6,Math.min(15,(gw-8)/3));
+    var yy=function(v){return pl.t+ih-(v/mx)*ih;};
+    var grid='';for(var i=0;i<=4;i++){var gyy=pl.t+ih*i/4;grid+='<line x1="'+pl.l+'" y1="'+gyy+'" x2="'+(W-pl.r)+'" y2="'+gyy+'" stroke="#F0EEE8" stroke-width="1"/>';}
+    var bars=months.map(function(d,idx){var cx=pl.l+gw*idx+gw/2;var s='';keys.forEach(function(k,j){var v=+d[k[0]]||0;var bh=Math.max(0,(v/mx)*ih);var x=cx-(3*bw+2*3)/2+j*(bw+3);s+='<rect x="'+x+'" y="'+yy(v)+'" width="'+bw+'" height="'+bh+'" rx="3" fill="'+k[1]+'"/>';});s+='<text x="'+cx+'" y="'+(H-7)+'" text-anchor="middle" font-size="10" fill="#9a9c9f">'+(d.m||'')+'</text>';return s;}).join('');
+    return '<div class="legend"><span><i style="background:#2A2A2A"></i>Факт</span><span><i style="background:#FDCF08"></i>План</span><span><i style="background:#CAC4B8"></i>АППГ</span></div><svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="none" style="height:200px;display:block">'+grid+bars+'</svg>';
+  }
+  function ov2HBars(items,cls,fmt){
+    var mx=Math.max.apply(null,items.map(function(x){return x.value||0;}).concat([1]));
+    return items.map(function(x){var v=Math.max(.015,(x.value||0)/mx);return '<div class="hb"><div title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="bar '+(cls||'')+'"><span style="--v:'+v.toFixed(3)+'"></span></div><div class="v">'+fmt(x.value||0)+'</div></div>';}).join('');
+  }
+  function overviewPage(){
+    ov2Assets();
+    var o=D.overview;
+    var _yr=String(Math.floor(periodRange()[0]/10000));
+    var _F3=(D.salesFilial3&&D.salesFilial3[_yr])||{};
+    var _B=(D.salesDetail&&D.salesDetail.brands)||{};
+    var _hr=(_B.headrock&&_B.headrock.sales)||0,_kr=(_B.kron&&_B.kron.sales)||0,_en=(_B.enki&&_B.enki.sales)||0;
+    var _rl=(o.regions||[]).map(function(r){return {name:r.name,value:r.value};}).filter(function(x){return x.value>0;}).sort(function(a,b){return b.value-a.value;});
+    var cats=(o.categories||[]).map(function(x){return {name:x.name,value:(x.sales||0)};}).filter(function(x){return x.value>0;}).sort(function(a,b){return b.value-a.value;}).slice(0,7);
+    var grUp=(o.growth||0)>=0;
+    var annual=o.plan||0, ytd=o.planYTD||o.plan||0, fact=o.sales||0;
+    var planDone=(o.planDone!=null)?o.planDone:(ytd?+(fact/ytd*100).toFixed(1):null);
+    var behind=(planDone!=null&&planDone<100);
+    // --- header ---
+    var head='<div class="o-head"><div><h1 class="o-title">Обзор продаж <span>· '+_yr+'</span></h1>'
+      +'<div class="o-sub">Вся компания, все бренды (HeadRock · KRONbuild · ENKI), с планом и годом-к-году. Без источника пока: скидки, себестоимость, маржинальность.</div></div>'
+      +'<div class="o-scope"><span class="chip">Вся компания</span><span class="chip">2024–2026</span></div></div>'
+      +'<div class="ov-filter">'+globalFilters()+'</div>';
+    // --- flagship (cockpit, dark) ---
+    var flag='<div class="flagship"><div class="fl-brand"><span class="klogo">K</span><b>Кайрос</b><span>Аналитика продаж</span></div>'
+      +'<div class="fl-num disp">'+fmtMoney(fact)+'</div><div class="fl-cap">Продажи нетто</div>'
+      +'<div class="fl-sub">Продажи '+fmtMoney(o.grossSales)+' · возвраты '+fmtMoney(o.returns)+'</div>'
+      +'<div class="fl-div"></div><div class="fl-grid">'
+      +'<div><div class="fl-rv '+(grUp?'up':'down')+'">'+(grUp?'+':'')+(o.growth!=null?o.growth:'—')+'%</div><div class="fl-rl">Δ к прошлому году</div></div>'
+      +'<div><div class="fl-rv">'+o.clients.toLocaleString('ru-RU')+'</div><div class="fl-rl">Партнёры</div></div>'
+      +'<div><div class="fl-rv">'+o.orders.toLocaleString('ru-RU')+'</div><div class="fl-rl">Заказы</div></div>'
+      +'<div><div class="fl-rv">'+o.units.toLocaleString('ru-RU')+'</div><div class="fl-rl">Штук</div></div>'
+      +'</div></div>';
+    // --- scoreboard (light) ---
+    var board;
+    if(annual>0){
+      var vFill=Math.max(0,Math.min(1,fact/annual));
+      var tToday=Math.max(0,Math.min(1,ytd/annual));
+      var ticks='';var cum=0;(o.months||[]).forEach(function(m){cum+=(+m.plan||0)*1e6;var pos=cum/annual;if(pos>0&&pos<1)ticks+='<div class="track-tick" style="left:'+(pos*100).toFixed(2)+'%"></div>';});
+      var fils='';['Москва','Владивосток','Сети'].forEach(function(f){var d=_F3[f]||{};var fa=d.fact||0,pv=d.plan;var pc=pv?fa/pv:null;fils+='<div class="bf"><div class="bfn">'+f+'</div><div class="bfv disp">'+fmtMoney(fa)+'</div><div class="miniprog"><span style="--v:'+(pc!=null?Math.max(.02,Math.min(1,pc)).toFixed(3):0)+'"></span></div><div class="bfp"><span>'+(pv?('план '+fmtMoney(pv)):'план —')+'</span><span>'+(pc!=null?Math.round(pc*100)+'%':'')+'</span></div></div>';});
+      board='<div class="board"><div class="board-top"><div><div class="board-cap">Выполнение плана · YTD</div><div class="board-pct disp">'+(planDone!=null?Math.round(planDone)+'%':'—')+'</div></div>'
+        +'<div class="board-right"><span class="schip '+(behind?'behind':'ahead')+'">'+(behind?'отстаём от плана':'идём по плану')+'</span>'
+        +'<div class="board-d">Факт <b>'+fmtMoney(fact)+'</b><br>план на сегодня <b>'+fmtMoney(ytd)+'</b><br>годовой план '+fmtMoney(annual)+'</div></div></div>'
+        +'<div class="track"><div class="track-fill" style="--v:'+vFill.toFixed(3)+'"></div>'+ticks+'<div class="track-today" data-l="сегодня" style="--t:'+tToday.toFixed(3)+'"></div></div>'
+        +'<div class="track-scale"><span>0</span><span>годовой план '+fmtMoney(annual)+'</span></div>'
+        +'<div class="board-fils">'+fils+'</div>'
+        +'<div class="board-foot"><button class="link" data-nav="sales">Детализация по филиалам '+ov2Arrow()+'</button></div></div>';
+    } else {
+      board='<div class="board"><div class="board-cap">Выполнение плана</div><div class="empty">План на выбранный период не задан.<br>Факт продаж — <b>'+fmtMoney(fact)+'</b>, Δ к прошлому году '+(grUp?'+':'')+(o.growth!=null?o.growth+'%':'—')+'.</div></div>';
+    }
+    var cockpit='<div class="cockpit">'+flag+board+'</div>';
+    // --- month chart ---
+    var monthCard='<div class="card2"><div class="ct">Продажи по месяцам<span class="r">'+_yr+' · факт / план / АППГ</span></div>'+ov2Bars(o.months||[])+'</div>';
+    // --- brands / categories / regions ---
+    var brandCard='<div class="card2"><div class="ct">Бренды<span class="r">'+_yr+'</span></div>'
+      +'<div class="brow"><span class="bmark"><i class="dot" style="background:#FDCF08"></i>KRONbuild</span><b class="disp">'+fmtMoney(_kr)+'</b></div>'
+      +'<div class="brow"><span class="bmark"><i class="dot" style="background:#C7001F"></i>HeadRock</span><b class="disp">'+fmtMoney(_hr)+'</b></div>'
+      +'<div class="brow"><span class="bmark"><i class="dot" style="background:#2A2A2A"></i>ENKI</span><b class="disp">'+fmtMoney(_en)+'</b></div></div>';
+    var catCard='<div class="card2"><div class="ct">Категории<span class="r">по продажам</span></div>'+(cats.length?ov2HBars(cats,'',fmtMoney):'<div class="empty">нет данных</div>')+'</div>';
+    var regCard='<div class="card2"><div class="ct">Бизнес-регионы<span class="r">нетто</span></div>'+(_rl.length?ov2HBars(_rl.slice(0,7),'y',fmtMoney):'<div class="empty">нет данных</div>')+'</div>';
+    // --- tops ---
+    var topCl='<div class="card2"><div class="ct">ТОП-10 клиентов<span class="r">клик — карточка</span></div><div class="scroll"><table><thead><tr><th>Клиент</th><th class="num">Продажи</th><th class="num">Доля</th></tr></thead><tbody>'
+      +(o.topClients||[]).slice(0,10).map(function(x){return '<tr class="clk" onclick="openClientByName(\''+(x.name||'').replace(/\x27/g,'')+'\')"><td>'+esc(x.name)+'</td><td class="num">'+fmtMoney(x.sales)+'</td><td class="num"><span class="pill">'+pct(x.share)+'</span></td></tr>';}).join('')+'</tbody></table></div></div>';
+    var topPr='<div class="card2"><div class="ct">ТОП-10 товаров</div><div class="scroll"><table><thead><tr><th>Товар</th><th class="num">Продажи</th></tr></thead><tbody>'
+      +(o.topProducts||[]).slice(0,10).map(function(x){return '<tr><td>'+esc(x.name)+'</td><td class="num">'+fmtMoney(x.sales)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+    return '<div class="ov2">'+head+cockpit+monthCard+'<div class="grid3">'+brandCard+catCard+regCard+'</div><div class="grid2">'+topCl+topPr+'</div></div>';
+  }
+  function salesPage(){
+    var rg=periodRange(),lo=rg[0],hi=rg[1],yr=String(Math.floor(lo/10000));
+    var mode=state.salesMode==='brand'?'brand':'filial';
+    var filials=['Москва','Владивосток','Сети'], brands=['HeadRock','KRONbuild + ENKI'];
+    var pick=state.salesPick; var opts=(mode==='filial'?filials:brands); if(opts.indexOf(pick)<0)pick=opts[0];
+    function fil3(name){var ch=(D.clientChannel||{})[name],fl=(D.clientFilial||{})[name]; if(ch==='СЕТИ')return 'Сети'; if(fl==='Владивосток')return 'Владивосток'; return 'Москва';}
+    function brOf(sk){var b=(D.txSkus[sk]||[])[3]||'HeadRock'; return b==='HeadRock'?'HeadRock':'KRONbuild + ENKI';}
+    var byMonth={},byReg={},byClient={},byBrand={},byProd={},fact=0,qty=0,ordSet={},clSet={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; if(t[0]<lo||t[0]>hi)continue; var cname=D.txClients[t[1]];
+      if(mode==='filial'){if(fil3(cname)!==pick)continue;}else{if(brOf(t[2])!==pick)continue;}
+      var net=t[4]; fact+=net; qty+=t[3]; clSet[t[1]]=1; ordSet[t[1]+'|'+t[0]]=1;
+      var mk=(''+t[0]).slice(0,6); byMonth[mk]=(byMonth[mk]||0)+net;
+      var rgn=(D.clientRegion||{})[cname]||'—'; byReg[rgn]=(byReg[rgn]||0)+net;
+      byClient[cname]=(byClient[cname]||0)+net;
+      var sk=D.txSkus[t[2]]||['—','—',0,'HeadRock']; byBrand[sk[3]||'HeadRock']=(byBrand[sk[3]||'HeadRock']||0)+net; byProd[sk[1]]=(byProd[sk[1]]||0)+net;
+    }
+    var plan=null;
+    if(mode==='filial'){plan=(((D.salesFilial3||{})[yr]||{})[pick]||{}).plan;}
+    else{var ba=((D.plan||{})[yr]||{}).brandAnnual||{}; plan=(pick==='HeadRock'?ba.headrock:ba.kronenki);}
+    var pcDone=plan?Math.round(fact/plan*100):null;
+    var MNn=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    var months=[]; for(var mi=1;mi<=12;mi++){var mm=(mi<10?'0':'')+mi; months.push({m:MNn[mi-1],fact:+(((byMonth[yr+mm]||0))/1e6).toFixed(3)});}
+    var nOrders=Object.keys(ordSet).length, nCl=Object.keys(clSet).length;
+    var chooser='<div class="segment">'+opts.map(function(o){return '<button class="seg-btn '+(o===pick?'active':'')+'" onclick="setSalesPick(\''+o+'\')">'+o+'</button>';}).join('')+'</div>';
+    var toolbar='<div class="toolbar"><div class="segment"><button class="seg-btn '+(mode==='filial'?'active':'')+'" onclick="setSalesMode(\'filial\')">Филиалы</button><button class="seg-btn '+(mode==='brand'?'active':'')+'" onclick="setSalesMode(\'brand\')">Бренды</button></div><span class="spacer"></span>'+chooser+'</div>';
+    var kpiHtml='<div class="kpi-grid">'+kpi('Продажи, ₽',fmtMoney(fact),'sales',(mode==='filial'?'филиал: ':'бренд: ')+pick,'','source')+
+      kpi('План, ₽',plan!=null?fmtMoney(plan):'—','target',plan!=null?('год '+yr):'план не выделен','',plan!=null?'source':'missing')+
+      kpi('Выполнение',plan?pct(pcDone):'—','percent','факт / план','',plan?'source':'missing')+
+      kpi('Клиентов',String(nCl),'users','в разрезе','','source')+
+      kpi('Заказы',String(nOrders),'cart','в разрезе','','source')+
+      kpi('Средний заказ',fmtMoney(nOrders?Math.round(fact/nOrders):0),'coins','расчёт','','source')+'</div>';
+    var regArr=Object.keys(byReg).map(function(r){return {name:r,value:byReg[r]};}).filter(function(x){return x.value>0;}).sort(function(a,b){return b.value-a.value;});
+    var clArr=Object.keys(byClient).map(function(n){return {name:n,v:byClient[n]};}).sort(function(a,b){return b.v-a.v;}).slice(0,15);
+    var prodArr=Object.keys(byProd).map(function(n){return {name:n,v:byProd[n]};}).sort(function(a,b){return b.v-a.v;}).slice(0,15);
+    var clTable='<div class="table-wrap"><table class="data-table"><thead><tr><th>Клиент</th><th class="num">Продажи</th></tr></thead><tbody>'+clArr.map(function(c){return '<tr class="clickable" onclick="openClientByName(\''+(c.name||'').replace(/\x27/g,'')+'\')"><td>'+esc(c.name)+'</td><td class="num">'+fmtMoney(c.v)+'</td></tr>';}).join('')+'</tbody></table></div>';
+    var midLeft = (mode==='filial')
+      ? sectionCard('Регионы разреза',hbars(regArr.slice(0,12),'value',fmtMoney),dataTag('source'))
+      : sectionCard('ТОП товаров',('<div class="table-wrap"><table class="data-table"><thead><tr><th>Товар</th><th class="num">Продажи</th></tr></thead><tbody>'+prodArr.map(function(x){return '<tr><td>'+esc(x.name)+'</td><td class="num">'+fmtMoney(x.v)+'</td></tr>';}).join('')+'</tbody></table>'),dataTag('source'));
+    var brSplit='<div class="brand-list">'+['HeadRock','KRONbuild','ENKI'].map(function(bn){var v=byBrand[bn]||0; return '<div class="brand-line"><span>'+brandLogo(bn==='HeadRock'?'headrock':(bn==='KRONbuild'?'kron':'enki'),bn)+'</span><b>'+fmtMoney(v)+'</b></div>';}).join('')+'</div>';
+    return pageHead('Продажи · '+(mode==='filial'?('Филиал — '+pick):('Бренд — '+pick)),'Проваливайся в филиал или бренд — детализация по разрезу.')+toolbar+kpiHtml+
+      '<div class="grid-2eq"><div class="card chart-card"><div class="card-title">Продажи по месяцам '+dataTag('source')+'<span class="right">'+yr+'</span></div>'+lineBars(months,[['fact','Факт','fact']],true)+'</div>'+(mode==='filial'?sectionCard('Бренды в разрезе',brSplit,dataTag('source')):sectionCard('Клиенты бренда',clTable,dataTag('source')))+'</div>'+
+      '<div class="grid-2eq">'+midLeft+(mode==='filial'?sectionCard('ТОП клиентов',clTable,dataTag('source')):sectionCard('Регионы бренда',hbars(regArr.slice(0,12),'value',fmtMoney),dataTag('source')))+'</div>';
+  }
+  window.setSalesMode=function(m){state.salesMode=m;state.salesPick=null;if(window.render)render();};
+  window.setSalesPick=function(p){state.salesPick=p;if(window.render)render();};
   function productsTable(items){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>SKU</th><th>Товар</th><th>Категория</th><th>ABC</th><th class="num">Продажи</th><th class="num">Δ</th><th class="num">Остаток</th></tr></thead><tbody>${items.map(p=>`<tr><td>${p.sku}</td><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td>${badge(p.abc,p.abc==='A'?'green':p.abc==='B'?'amber':'gray')}</td><td class="num">${fmtMoney(p.sales)}</td><td class="num">${p.growth==null?dataTag('missing','нет АППГ'):delta(p.growth)}</td><td class="num">${p.stock?.toLocaleString('ru-RU')||'—'}</td></tr>`).join('')}</tbody></table></div>`}
 
   function regionsPage(){
     var D=window.KRS_DATA;
-    // recompute region sales + client lists by current period from transactions
-    var rg=periodRange(),lo=rg[0],hi=rg[1];
+    var rg=periodRange(),lo=rg[0],hi=rg[1], yr=String(Math.floor(lo/10000));
+    var buckets=['ОПТ Москва','ОПТ Владивосток','СНГ','Сети'];
+    if(!state.regBucket||buckets.indexOf(state.regBucket)<0)state.regBucket=buckets[0];
+    var bk=state.regBucket;
+    function bucketOf(name){
+      var ch=(D.clientChannel||{})[name], fl=(D.clientFilial||{})[name], rgn=(D.clientRegion||{})[name];
+      if(ch==='СЕТИ')return 'Сети';
+      if(rgn==='Беларусь'||rgn==='Казахстан'||rgn==='Кыргызстан'||rgn==='СНГ')return 'СНГ';
+      if(fl==='Владивосток')return 'ОПТ Владивосток';
+      if(fl==='Москва')return 'ОПТ Москва';
+      return 'Не распределён';
+    }
     var regSales={}, regClients={};
-    if(D.tx&&D.clientRegion){
-      for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; if(t[0]<lo||t[0]>hi)continue;
-        var cname=D.txClients[t[1]]; var reg=D.clientRegion[cname]||'Прочее';
-        regSales[reg]=(regSales[reg]||0)+t[4];
-        if(!regClients[reg])regClients[reg]={}; regClients[reg][cname]=(regClients[reg][cname]||0)+t[4];
-      }
-    } else if(D.regionsData){
-      for(var r in D.regionsData){regSales[r]=D.regionsData[r].sales; regClients[r]={}; D.regionsData[r].list.forEach(function(c){regClients[r][c.name]=c.sales;});}
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; if(t[0]<lo||t[0]>hi)continue;
+      var cname=D.txClients[t[1]]; if(bucketOf(cname)!==bk)continue;
+      var reg=(D.clientRegion||{})[cname]||'Прочее';
+      regSales[reg]=(regSales[reg]||0)+t[4];
+      if(!regClients[reg])regClients[reg]={}; regClients[reg][cname]=(regClients[reg][cname]||0)+t[4];
     }
-    var foreign=(D.foreignRegions||['Беларусь']);
-    var allRegs=Object.keys(regSales).filter(function(r){return regSales[r]!==0;});
-    var rusRegs=allRegs.filter(function(r){return foreign.indexOf(r)<0;}).sort(function(a,b){return regSales[b]-regSales[a];});
-    var forRegs=allRegs.filter(function(r){return foreign.indexOf(r)>=0;}).sort(function(a,b){return regSales[b]-regSales[a];});
-    var total=allRegs.reduce(function(s,r){return s+regSales[r];},0)||1;
-    var maxv=rusRegs.length?regSales[rusRegs[0]]:1;
-    var sel=window.selRegion; if(!sel||allRegs.indexOf(sel)<0)sel=rusRegs[0]||allRegs[0]||'';
-    function regRow(r){
-      var w=Math.round(regSales[r]/maxv*100); if(w<2)w=2;
-      var active=(r===sel)?'style="background:#fff5ef;border-color:#f2a47d"':'';
-      var cnt=Object.keys(regClients[r]||{}).length;
-      return `<div class="reg-row" ${active} onclick="selRegionSet('${r.replace(/'/g,"")}')">
-        <div class="reg-name">${esc(r)} <span class="reg-cnt">${cnt} клиентов</span></div>
-        <div class="reg-bar"><span style="width:${w}%"></span></div>
-        <div class="reg-sum">${fmtMoney(regSales[r])} <small>${(regSales[r]/total*100).toFixed(0)}%</small></div></div>`;
-    }
-    var rusHtml=rusRegs.map(regRow).join('');
-    var forHtml=forRegs.map(regRow).join('');
+    var regs=Object.keys(regSales).filter(function(r){return regSales[r]!==0;}).sort(function(a,b){return regSales[b]-regSales[a];});
+    var total=regs.reduce(function(s,r){return s+regSales[r];},0)||1;
+    var maxv=regs.length?regSales[regs[0]]:1;
+    var nCl=regs.reduce(function(s,r){return s+Object.keys(regClients[r]).length;},0);
+    var sel=window.selRegion; if(!sel||regs.indexOf(sel)<0)sel=regs[0]||'';
+    var sf=((D.salesFilial||{})[yr]||{})[bk]||{}; var plan=sf.plan;
+    var sw='<div class="toolbar"><div class="segment">'+buckets.map(function(b){return '<button class="seg-btn '+(b===bk?'active':'')+'" onclick="setRegBucket(\''+b+'\')">'+b+'</button>';}).join('')+'</div></div>';
+    var kpiHtml='<div class="kpi-grid">'+
+      kpi('Факт '+yr,fmtMoney(total),'sales','разрез: '+bk,'','source')+
+      kpi('План '+yr,plan!=null?fmtMoney(plan):'—','target',plan!=null?'из плана':'план в этом разрезе не выделен','',plan!=null?'source':'missing')+
+      kpi('Выполнение',plan?pct(Math.round(total/plan*100)):'—','percent','факт / план','',plan?'source':'missing')+
+      kpi('Клиентов',String(nCl),'users','в разрезе','','source')+'</div>';
+    function regRow(r){var w=Math.round(regSales[r]/maxv*100);if(w<2)w=2;var active=(r===sel)?'style="background:#fff5ef;border-color:#f2a47d"':'';var cnt=Object.keys(regClients[r]||{}).length;
+      return '<div class="reg-row" '+active+' onclick="selRegionSet(\''+r.replace(/\x27/g,'')+'\')"><div class="reg-name">'+esc(r)+' <span class="reg-cnt">'+cnt+' клиентов</span></div><div class="reg-bar"><span style="width:'+w+'%"></span></div><div class="reg-sum">'+fmtMoney(regSales[r])+' <small>'+(regSales[r]/total*100).toFixed(0)+'%</small></div></div>';}
+    var regHtml=regs.map(regRow).join('')||'<div class="empty">нет данных за период</div>';
     var cl=Object.keys(regClients[sel]||{}).map(function(n){return {name:n,sales:regClients[sel][n]};}).sort(function(a,b){return b.sales-a.sales;});
-    var rows=cl.map(function(c,idx){return `<tr class="clickable" onclick="openClientByName('${(c.name||'').replace(/'/g,"")}')"><td>${idx+1}</td><td>${esc(c.name)}</td><td class="num">${fmtMoney(c.sales)}</td></tr>`;}).join('');
-    return pageHead('Бизнес-регионы','Продажи по регионам и клиенты внутри региона.')+
-    `<div class="region-layout">
-       <section class="card pad"><div class="card-title">Россия — бизнес-регионы ${dataTag('source')}</div><div class="reg-list">${rusHtml}</div>
-         ${forHtml?`<div class="card-title" style="margin-top:16px">Другие страны / СНГ</div><div class="reg-list">${forHtml}</div>`:''}
-       </section>
-       <section class="card pad"><div class="card-title">Клиенты — ${esc(sel)} <span class="right">${cl.length} клиентов · ${fmtMoney(regSales[sel]||0)}</span></div>
-         <div class="table-wrap" style="max-height:600px"><table class="data-table"><thead><tr><th>#</th><th>Клиент</th><th class="num">Продажи</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class="empty">нет данных за период</td></tr>'}</tbody></table></div>
-       </section>
-     </div>`;
+    var rows=cl.map(function(c,idx){return '<tr class="clickable" onclick="openClientByName(\''+(c.name||'').replace(/\x27/g,'')+'\')"><td>'+(idx+1)+'</td><td>'+esc(c.name)+'</td><td class="num">'+fmtMoney(c.sales)+'</td></tr>';}).join('');
+    return pageHead('Бизнес-регионы','Переключай разрез: ОПТ Москва / ОПТ Владивосток / СНГ / Сети. Внутри — регионы и клиенты.')+sw+kpiHtml+
+    '<div class="region-layout"><section class="card pad"><div class="card-title">'+bk+' — регионы '+dataTag('source')+'</div><div class="reg-list">'+regHtml+'</div></section>'+
+    '<section class="card pad"><div class="card-title">Клиенты — '+esc(sel)+' <span class="right">'+cl.length+' клиентов · '+fmtMoney(regSales[sel]||0)+'</span></div><div class="table-wrap" style="max-height:600px"><table class="data-table"><thead><tr><th>#</th><th>Клиент</th><th class="num">Продажи</th></tr></thead><tbody>'+(rows||'<tr><td colspan=3 class="empty">нет данных</td></tr>')+'</tbody></table></div></section></div>';
   }
+  window.setRegBucket=function(b){state.regBucket=b;window.selRegion=null;if(window.render)render();};
   window.selRegionSet=function(r){window.selRegion=r; if(window.render)render();};
   window.openClientByName=function(name){
     var id=null; for(var i=0;i<D.clients.length;i++){if(D.clients[i].name===name){id=D.clients[i].id;break;}}
     if(id){state.page='clients';state.client=id;state.clientTab='overview'; if(window.render)render();}
   };
-  function managerPage(){return `${pageHead('Менеджеры','Текущая выгрузка содержит верхнеуровневые группы и партнеров, но связку «менеджер ↔ бизнес-регион» нужно нормализовать.')}${notice()}<div class="grid-2eq"><div class="card pad"><div class="card-title">Доступная информация ${dataTag('partial')}</div><ul class="ai-list"><li>Продажи верхнеуровневых групп и партнеров.</li><li>Количество и сумма продаж / возвратов.</li><li>Клиенты из сводной части отчета.</li></ul></div><div class="card pad"><div class="card-title">Нужно добавить ${dataTag('missing')}</div><ul class="ai-list"><li>Стабильный ID менеджера.</li><li>Справочник закрепления бизнес-региона.</li><li>Планы менеджеров и планы по брендам.</li><li>АППГ и скидки.</li></ul></div></div><div class="card pad"><div class="card-title">Группы из текущего отчета ${dataTag('partial')}</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Группа / менеджер в источнике</th><th class="num">Продажи</th></tr></thead><tbody>${D.sourceLists.groups.map(x=>`<tr><td>${esc(x.name)}</td><td class="num">${fmtMoney(x.sales)}</td></tr>`).join('')}</tbody></table></div></div>`}
-
+  function managerPage(){
+    var rg=periodRange(),lo=rg[0],hi=rg[1],yr=String(Math.floor(lo/10000));
+    var CM=D.clientManager||{}; var sel=state.mgrSel;
+    var mSales={},mCl={},mOrd={},byMonth={},byReg={},byClient={},byBrand={},detFact=0,detOrd={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; if(t[0]<lo||t[0]>hi)continue; var cname=D.txClients[t[1]]; var mg=CM[cname]; if(!mg)continue;
+      var net=t[4]; mSales[mg]=(mSales[mg]||0)+net; (mCl[mg]||(mCl[mg]={}))[t[1]]=1; (mOrd[mg]||(mOrd[mg]={}))[t[1]+'|'+t[0]]=1;
+      if(sel&&mg===sel){detFact+=net; var mk=(''+t[0]).slice(0,6); byMonth[mk]=(byMonth[mk]||0)+net; var reg=(D.clientRegion||{})[cname]||'—'; byReg[reg]=(byReg[reg]||0)+net; byClient[cname]=(byClient[cname]||0)+net; var sk=D.txSkus[t[2]]||['','',0,'HeadRock']; byBrand[sk[3]||'HeadRock']=(byBrand[sk[3]||'HeadRock']||0)+net; detOrd[t[1]+'|'+t[0]]=1;}
+    }
+    var mgrs=Object.keys(mSales).sort(function(a,b){return mSales[b]-mSales[a];});
+    var total=mgrs.reduce(function(s,m){return s+mSales[m];},0)||1;
+    var rows=mgrs.map(function(m){var cnt=Object.keys(mCl[m]).length,ord=Object.keys(mOrd[m]).length,s=mSales[m];
+      return '<tr class="clickable" onclick="setMgr(\''+m.replace(/\x27/g,'')+'\')"'+(m===sel?' style="background:#fff5ef"':'')+'><td>'+esc(m)+'</td><td class="num">'+fmtMoney(s)+'</td><td class="num">'+(s/total*100).toFixed(0)+'%</td><td class="num">'+cnt+'</td><td class="num">'+ord+'</td><td class="num">'+fmtMoney(ord?Math.round(s/ord):0)+'</td></tr>';}).join('');
+    var table='<div class="card pad"><div class="card-title">Менеджеры '+dataTag('source','закрепление по округам')+'<span class="right">'+mgrs.length+' менеджеров · '+fmtMoney(total)+' · сети не учтены</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Менеджер</th><th class="num">Продажи</th><th class="num">Доля</th><th class="num">Клиентов</th><th class="num">Заказов</th><th class="num">Средний чек</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    var detail='';
+    if(sel){
+      var MNn=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+      var months=[]; for(var mi=1;mi<=12;mi++){var mm=(mi<10?'0':'')+mi;months.push({m:MNn[mi-1],fact:+(((byMonth[yr+mm]||0))/1e6).toFixed(3)});}
+      var regArr=Object.keys(byReg).map(function(r){return {name:r,value:byReg[r]};}).sort(function(a,b){return b.value-a.value;});
+      var clArr=Object.keys(byClient).map(function(n){return {name:n,v:byClient[n]};}).sort(function(a,b){return b.v-a.v;}).slice(0,15);
+      var clT='<div class="table-wrap"><table class="data-table"><thead><tr><th>Клиент</th><th class="num">Продажи</th></tr></thead><tbody>'+clArr.map(function(c){return '<tr class="clickable" onclick="openClientByName(\''+(c.name||'').replace(/\x27/g,'')+'\')"><td>'+esc(c.name)+'</td><td class="num">'+fmtMoney(c.v)+'</td></tr>';}).join('')+'</tbody></table></div>';
+      var brS='<div class="brand-list">'+['HeadRock','KRONbuild','ENKI'].map(function(bn){return '<div class="brand-line"><span>'+brandLogo(bn==='HeadRock'?'headrock':(bn==='KRONbuild'?'kron':'enki'),bn)+'</span><b>'+fmtMoney(byBrand[bn]||0)+'</b></div>';}).join('')+'</div>';
+      var no=Object.keys(detOrd).length;
+      detail='<div class="kpi-grid">'+kpi('Продажи · '+sel,fmtMoney(detFact),'sales','за период','','source')+kpi('Клиентов',String(Object.keys(byClient).length),'users','','','source')+kpi('Заказов',String(no),'cart','','','source')+kpi('Средний чек',fmtMoney(no?Math.round(detFact/no):0),'coins','','','source')+'</div>'+
+        '<div class="grid-2eq"><div class="card chart-card"><div class="card-title">Продажи по месяцам '+dataTag('source')+'<span class="right">'+yr+'</span></div>'+lineBars(months,[['fact','Факт','fact']],true)+'</div>'+sectionCard('Округа менеджера',hbars(regArr.slice(0,12),'value',fmtMoney),dataTag('source'))+'</div>'+
+        '<div class="grid-2eq">'+sectionCard('ТОП клиентов — '+esc(sel),clT,dataTag('source'))+sectionCard('Бренды',brS,dataTag('source'))+'</div>';
+    }
+    return pageHead('Менеджеры','Закрепление по округам. Клик по менеджеру — детализация. Сети не учитываются.')+table+detail;
+  }
+  window.setMgr=function(m){state.mgrSel=(state.mgrSel===m?null:m);if(window.render)render();};
   function clientTable(items,searchable=false){
     const q=(state.search||'').toLowerCase();
     const seg=state.segment||'';
@@ -422,7 +651,252 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   function signalsPage(){return `<div class="embedded-preview" style="margin:-6px -2px 0"><iframe title="Товарные сигналы" src="work/turnover-monitor-preview-browser-v7.html" style="display:block;width:100%;height:1550px;border:0;border-radius:12px;background:#fff"></iframe></div>`;}
   function clientAssortment2(c){return clientAssortment(c);}
 
-  window.render=function render(){const app=$('#app');let page='';if(state.page==='overview')page=overviewPage();else if(state.page==='sales')page=salesPage();else if(state.page==='regions')page=regionsPage();else if(state.page==='managers')page=managerPage();else if(state.page==='clients')page=clientsPage();else if(state.page==='logistics')page=logisticsPage();else if(state.page==='signals')page=signalsPage();app.innerHTML=`<div class="app">${topbar()}<main class="main">${page}<div class="footer-note">Кайрос · прототип дашборда V3 · данные из текущих Excel отмечены в интерфейсе</div></main></div>`;bind();}
+  function abcClass(map){var it=Object.keys(map).map(function(k){return [k,map[k]];}).filter(function(x){return x[1]>0;}).sort(function(a,b){return b[1]-a[1];});
+    var tot=it.reduce(function(s,x){return s+x[1];},0)||1,cum=0,cls={};
+    it.forEach(function(x){cum+=x[1];var sh=cum/tot;cls[x[0]]=sh<=0.8?'A':(sh<=0.95?'B':'C');});return cls;}
+  function abcPage(){
+    var rg=periodRange(),lo=rg[0],hi=rg[1],cur=Math.floor(lo/10000),prev=cur-1;
+    var cuts=['Компания','Филиал','Бренд','Менеджер','Клиент'];
+    if(cuts.indexOf(state.abcCut)<0)state.abcCut='Компания';
+    var cut=state.abcCut;
+    var CF=D.clientFilial||{},CC=D.clientChannel||{},CM=D.clientManager||{};
+    function fil3(nm){var ch=CC[nm],fl=CF[nm];if(ch==='СЕТИ')return 'Сети';if(fl==='Владивосток')return 'Владивосток';return 'Москва';}
+    function brOf(sk){var b=(D.txSkus[sk]||[])[3]||'HeadRock';return b==='HeadRock'?'HeadRock':'KRONbuild + ENKI';}
+    var picks=null;
+    if(cut==='Филиал')picks=['Москва','Владивосток','Сети'];
+    else if(cut==='Бренд')picks=['HeadRock','KRONbuild + ENKI'];
+    else if(cut==='Менеджер'){var sset={};for(var k in CM){if(CM[k])sset[CM[k]]=1;}picks=Object.keys(sset).sort();}
+    var pick=state.abcPick;
+    if(cut==='Клиент'){var onames=(D.clients||[]).map(function(c){return c.name;});if(onames.indexOf(pick)<0)pick=onames[0]||'';}
+    else if(cut!=='Компания'){if(!picks||picks.indexOf(pick)<0)pick=(picks&&picks[0])||'';}
+    function member(cname,sk){
+      if(cut==='Компания')return true;
+      if(cut==='Филиал')return fil3(cname)===pick;
+      if(cut==='Бренд')return brOf(sk)===pick;
+      if(cut==='Менеджер')return CM[cname]===pick;
+      if(cut==='Клиент')return cname===pick;
+      return false;}
+    var compCur={},cutCur={},cutPrev={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i];var y=Math.floor(t[0]/10000);var sk=t[2];var net=t[4];var cn=D.txClients[t[1]];
+      if(y===cur){compCur[sk]=(compCur[sk]||0)+net; if(member(cn,sk))cutCur[sk]=(cutCur[sk]||0)+net;}
+      else if(y===prev){if(member(cn,sk))cutPrev[sk]=(cutPrev[sk]||0)+net;}}
+    var compCls=abcClass(compCur),cutCls=abcClass(cutCur);
+    var totCut=Object.keys(cutCur).reduce(function(s,k){return s+(cutCur[k]>0?cutCur[k]:0);},0)||1;
+    var cnt={A:0,B:0,C:0},rev={A:0,B:0,C:0};
+    for(var kk in cutCls){cnt[cutCls[kk]]++; if(cutCur[kk]>0)rev[cutCls[kk]]+=cutCur[kk];}
+    var summ='<div class="kpi-grid">'+
+      kpi('A-позиции',(cnt.A||0)+' SKU','target',Math.round(rev.A/totCut*100)+'% выручки разреза','','source')+
+      kpi('B-позиции',(cnt.B||0)+' SKU','box',Math.round(rev.B/totCut*100)+'%','','source')+
+      kpi('C-позиции',(cnt.C||0)+' SKU','box',Math.round(rev.C/totCut*100)+'%','','source')+
+      kpi('Выручка разреза',fmtMoney(totCut),'sales',cut+(cut!=='Компания'?(' · '+pick):''),'','source')+'</div>';
+    var skus=Object.keys(cutCur).filter(function(k){return cutCur[k]!==0;}).sort(function(a,b){return cutCur[b]-cutCur[a];}).slice(0,120);
+    var isCo=(cut==='Компания');
+    var trows=skus.map(function(sk){var si=D.txSkus[sk]||['—','—',0];var rc=cutCur[sk];var rp=cutPrev[sk]||0;
+      var d=rp?Math.round((rc-rp)/rp*100):null;var ac=cutCls[sk]||'C';var acmp=compCls[sk]||'—';
+      var mism=(ac!==acmp&&acmp!=='—')?' style="color:#C0392B;font-weight:700"':'';
+      var co=compCur[sk]||0;var shc=co?Math.round(rc/co*100):null;
+      var coCols=isCo?'':('<td class="num">'+fmtMoney(co)+'</td><td class="num"><b>'+(shc==null?'—':shc+'%')+'</b></td>');
+      var tv=(D.turnover||{})[si[0]];var stk=tv?(tv.in_stock||0):null;var dos=tv?tv.dos:undefined;
+      var dosCell=(tv==null)?'—':(dos==null?badge('мёртвый','red'):(dos<30?badge(dos+'д','amber'):(dos>180?badge(dos+'д','red'):badge(dos+'д','green'))));
+      var expCell=(tv==null)?'—':(tv.exp_expired>0?badge('просроч. '+tv.exp_expired,'red'):(tv.exp_soon>0?badge('≤90д '+tv.exp_soon,'amber'):(tv.exp_near||'—')));
+      var stCols='<td class="num">'+(stk==null?'—':stk)+'</td><td>'+dosCell+'</td><td>'+expCell+'</td>';
+      return '<tr><td>'+esc(si[1])+'</td><td class="num">'+fmtMoney(rc)+'</td>'+coCols+'<td class="num">'+(rc/totCut*100).toFixed(1)+'%</td><td>'+badge(ac,ac==='A'?'green':ac==='B'?'amber':'gray')+'</td><td'+mism+'>'+acmp+'</td>'+stCols+'<td class="num">'+(d==null?'—':delta(d))+'</td></tr>';}).join('');
+    var coHead=isCo?'':'<th class="num">Выручка компании</th><th class="num">% компании</th>';
+    var table='<section class="card pad"><div class="card-title">SKU разреза — ABC, остатки и сравнение '+dataTag('source')+'</div><div class="table-wrap" style="max-height:560px"><table class="data-table"><thead><tr><th>Товар</th><th class="num">Выручка'+(isCo?'':' в разрезе')+'</th>'+coHead+'<th class="num">Доля</th><th>ABC разрез</th><th>ABC компания</th><th class="num">Остаток</th><th>Оборач.</th><th>Срок годн.</th><th class="num">Δ к '+prev+'</th></tr></thead><tbody>'+(trows||'<tr><td colspan=11 class="empty">нет данных</td></tr>')+'</tbody></table></div></section>';
+    var grow=Object.keys(compCur).filter(function(k){return compCls[k]==='A'&&(cutCur[k]||0)<(compCur[k]*0.001);}).sort(function(a,b){return compCur[b]-compCur[a];}).slice(0,15);
+    var grows=grow.map(function(sk){var si=D.txSkus[sk]||['—','—'];return '<tr><td>'+esc(si[1])+'</td><td class="num">'+fmtMoney(compCur[sk])+'</td><td class="num">'+fmtMoney(cutCur[sk]||0)+'</td></tr>';}).join('');
+    var growBlock=(cut==='Компания')?'<section class="card pad"><div class="card-title">Правило ABC</div><div style="font-size:13px;color:#4a5160;line-height:1.5">A — товары, дающие 80% выручки разреза; B — следующие 15%; C — последние 5%. В других разрезах столбец «ABC компания» показывает класс того же товара в целом по компании — расхождение (красным) это точка внимания.</div></section>':'<section class="card pad ai"><div class="ai-head">'+ico('spark')+' Точки роста — что подтянуть</div><div style="font-size:12px;color:#727987;margin-bottom:8px">A-товары компании, которых в разрезе «'+esc(pick||cut)+'» почти нет — приоритет к допродаже.</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Товар (A по компании)</th><th class="num">Выручка компании</th><th class="num">В разрезе</th></tr></thead><tbody>'+(grows||'<tr><td colspan=3 class="empty">разрез хорошо покрывает топ-A</td></tr>')+'</tbody></table></div></section>';
+    var cutSeg='<div class="segment">'+cuts.map(function(c){return '<button class="seg-btn '+(c===cut?'active':'')+'" onclick="setAbcCut(\''+c+'\')">'+c+'</button>';}).join('')+'</div>';
+    var pickHtml='';
+    if(cut==='Клиент'){var opts=(D.clients||[]);pickHtml='<select class="search" style="max-width:280px" onchange="setAbcPick(this.value)">'+opts.slice(0,600).map(function(c){return '<option value="'+esc(c.name)+'"'+(c.name===pick?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')+'</select>';}
+    else if(picks){pickHtml='<div class="segment">'+picks.map(function(pp){return '<button class="seg-btn '+(pp===pick?'active':'')+'" onclick="setAbcPick(\''+pp.replace(/\x27/g,'')+'\')">'+esc(pp)+'</button>';}).join('')+'</div>';}
+    var toolbar='<div class="toolbar">'+cutSeg+'<span class="spacer"></span>'+pickHtml+'</div>';
+    return pageHead('ABC-анализ','Разрез: компания / филиал / бренд / менеджер / клиент. Сравнение с компанией и прошлым годом.')+toolbar+summ+'<div class="grid-2eq" style="align-items:start">'+table+growBlock+'</div>';
+  }
+  window.setAbcCut=function(c){state.abcCut=c;state.abcPick=null;if(window.render)render();};
+  window.setAbcPick=function(p){state.abcPick=p;if(window.render)render();};
+
+  function turnoverPage(){
+    var T=D.turnover||{}; var arts=Object.keys(T);
+    var f=state.turnFilter||'all';
+    var cnt={short:0,slow:0,dead:0,ok:0}; for(var a in T){cnt[T[a].status]=(cnt[T[a].status]||0)+1;}
+    var STAT={short:'Дефицит',slow:'Медленный',dead:'Мёртвый',ok:'Норма'};
+    var COL={short:'amber',slow:'red',dead:'red',ok:'green'};
+    var filt=arts.filter(function(a){return f==='all'?true:(f==='expiry'?(T[a].exp_expired>0||T[a].exp_soon>0):T[a].status===f);});
+    var expiredSum=0,soonSum=0,expFrozSum=0,soonFrozSum=0;for(var a3 in T){expiredSum+=(T[a3].exp_expired||0);soonSum+=(T[a3].exp_soon||0);expFrozSum+=(T[a3].exp_froz||0);soonFrozSum+=(T[a3].soon_froz||0);}
+    var rank={dead:0,slow:1,short:2,ok:3};
+    filt.sort(function(a,b){var da=T[a],db=T[b]; if(rank[da.status]!==rank[db.status])return rank[da.status]-rank[db.status]; return (db.dos==null?1e9:db.dos)-(da.dos==null?1e9:da.dos);});
+    var frozenSum=0; for(var a2 in T){if(T[a2].status==='dead'||T[a2].status==='slow')frozenSum+=(T[a2].frozen||0);}
+    var rows=filt.slice(0,300).map(function(a){var t=T[a];
+      var exc=(t.exp_expired>0)?badge('\u043f\u0440\u043e\u0441\u0440\u043e\u0447. '+t.exp_expired,'red'):((t.exp_soon>0)?badge('\u226490\u0434 '+t.exp_soon,'amber'):(t.exp_near||'\u2014'));
+      var bl=t.batches||[]; var expCell;
+      if(bl.length){var inner=bl.map(function(b){var c=b.st==='exp'?'#C0392B':(b.st==='soon'?'#B7791F':'#4a5160');return '<div style="color:'+c+'">'+esc(b.d)+' \u2014 '+b.q+' \u0448\u0442'+(b.st==='exp'?' (\u043f\u0440\u043e\u0441\u0440\u043e\u0447.)':(b.st==='soon'?' (\u226490\u0434)':''))+'</div>';}).join('');
+        var mny=((t.exp_froz||0)+(t.soon_froz||0))>0?('<div style="margin-top:4px;color:#8b93a1">\u0437\u0430\u043c\u043e\u0440\u043e\u0436\u0435\u043d\u043e: '+fmtMoney((t.exp_froz||0)+(t.soon_froz||0))+'</div>'):'';
+        expCell='<details><summary style="cursor:pointer">'+exc+' <span style="color:#8b93a1;font-size:11px">('+bl.length+' \u043f\u0430\u0440\u0442.)</span></summary><div style="font-size:11px;margin-top:4px;padding-left:2px">'+inner+mny+'</div></details>';
+      } else expCell=exc;
+      return '<tr><td>'+esc(a)+'</td><td>'+esc(t.name)+'</td><td class="num">'+(t.in_stock||0)+'</td><td class="num">'+(t.available||0)+'</td><td class="num">'+(t.reserved||0)+'</td><td class="num">'+(t.incoming||0)+'</td><td class="num">'+(t.sold||0)+'</td><td class="num"><b>'+(t.dos==null?'\u221e':t.dos)+'</b></td><td class="num">'+fmtMoney(t.frozen||0)+'</td><td>'+expCell+'</td><td>'+badge(STAT[t.status],COL[t.status])+'</td></tr>';}).join('');
+    var seg='<div class="toolbar"><div class="segment">'+[['all','Все'],['dead','Мёртвые'],['slow','Медленные'],['short','Дефицит'],['ok','Норма'],['expiry','Сроки']].map(function(o){return '<button class="seg-btn '+(f===o[0]?'active':'')+'" onclick="setTurnF(\''+o[0]+'\')">'+o[1]+'</button>';}).join('')+'</div><span class="spacer"></span><span class="pinfo">окно 90 дней · дней запаса = остаток / средние продажи в день</span></div>';
+    var kpiHtml='<div class="kpi-grid">'+kpi('SKU на складе',String(arts.length),'box','остаток > 0','','source')+kpi('Дефицит',String(cnt.short||0),'alert','< 30 дней запаса','','source')+kpi('Медленные',String(cnt.slow||0),'trend','> 180 дней','','source')+kpi('Мёртвый запас',String(cnt.dead||0),'alert','0 продаж за 90 дней','','source')+kpi('Заморожено, ₽',fmtMoney(frozenSum),'coins','остаток медленных+мёртвых × цена','','source')+kpi('Просрочено, ₽',fmtMoney(expFrozSum),'alert',expiredSum+' шт · срок истёк','',expFrozSum>0?'missing':'source')+kpi('Истекает ≤90д, ₽',fmtMoney(soonFrozSum),'calendar',soonSum+' шт · ближайшие 90 дней','',soonFrozSum>0?'missing':'source')+'</div>';
+    return pageHead('Остатки и сроки','Остатки, оборачиваемость (дней запаса) и сроки годности по каждому артикулу. Склад «Лакония».')+seg+kpiHtml+'<section class="card pad"><div class="card-title">Артикулы '+dataTag('source','Лакония ОПТ')+'<span class="right">'+filt.length+' позиций</span></div><div class="table-wrap" style="max-height:640px"><table class="data-table"><thead><tr><th>Артикул</th><th>Товар</th><th class="num">В наличии</th><th class="num">Доступно</th><th class="num">Резерв</th><th class="num">В пути</th><th class="num">Продано 90д</th><th class="num">Дней запаса</th><th class="num">Стоимость</th><th>Срок годности</th><th>Статус</th></tr></thead><tbody>'+(rows||'<tr><td colspan=9 class="empty">нет данных</td></tr>')+'</tbody></table></div></section>';
+  }
+  window.setTurnF=function(f){state.turnFilter=f;if(window.render)render();};
+
+  function assortSynMargin(art,cat){var s=String(art||cat||'x');var hh=0;for(var i=0;i<s.length;i++){hh=(hh*31+s.charCodeAt(i))>>>0;}return 22+(hh%37);}
+  function assortWindows(){var W=state.assortWin||6;var maxd=0;for(var i=0;i<D.tx.length;i++){if(D.tx[i][0]>maxd)maxd=D.tx[i][0];}
+    function shift(intd,mon){var y=Math.floor(intd/10000),m=Math.floor(intd/100)%100,dd=intd%100;var dt=new Date(y,m-1,dd);dt.setMonth(dt.getMonth()-mon);return dt.getFullYear()*10000+(dt.getMonth()+1)*100+dt.getDate();}
+    return {W:W,maxd:maxd,now0:shift(maxd,W),prev0:shift(maxd,2*W)};}
+  function assortStatus(prevNet,curNet,temp){if(prevNet<=0&&curNet>0)return 'Ввод';if(prevNet>0&&curNet<=0)return 'Вывод';if(temp>120)return 'Рост';if(temp<80)return 'Падение';return 'Стабильно';}
+  function assortPrio(dos,status,high){var known=(dos!=null),slow=(known&&dos>90),mid=(known&&dos>=30&&dos<=90),down=(status==='Падение'||status==='Вывод'),up=(status==='Рост'||status==='Ввод');
+    // красный «вывод/замена» — только при ИЗВЕСТНОЙ плохой оборачиваемости (нет остатка на складе ≠ «медленно»)
+    if(slow&&down)return {r:1,l:'Вывести',c:'red',a:'Вывести из ассортимента клиента (медленно + падение)'};
+    if(mid&&!high)return {r:2,l:'Заменить / акция',c:'red',a:'Заменить на аналог или распродажа'};
+    if(mid&&high)return {r:3,l:'Снизить объём',c:'amber',a:'Снизить закупку, точечное продвижение'};
+    if(up&&high)return {r:4,l:'Расширять',c:'green',a:'Расширить присутствие, увеличить сток'};
+    if(up&&!high)return {r:5,l:'Контроль',c:'amber',a:'Поддерживать, контролировать условия'};
+    if(down)return {r:5,l:'Пересмотреть',c:'amber',a:'Падение продаж — пересмотреть условия, акция'};
+    return {r:6,l:'Как есть',c:'gray',a:'Поддерживать как есть'};}
+  function assortBuild(){
+    var win=assortWindows();
+    var C={},curRev={},prevRev={},curQty={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i],d=t[0];if(d<=win.prev0||d>win.maxd)continue;var cn=D.txClients[t[1]],sk=t[2],per=(d>win.now0)?'cur':'prev';
+      var c=C[cn]||(C[cn]={cur:{},prev:{}});var b=c[per];var e=b[sk]||(b[sk]={q:0,net:0});e.q+=t[3];e.net+=t[4];
+      if(per==='cur'){curRev[sk]=(curRev[sk]||0)+t[4];curQty[sk]=(curQty[sk]||0)+t[3];}else prevRev[sk]=(prevRev[sk]||0)+t[4];}
+    var comAbc=abcClass(curRev);
+    var catM={};for(var sk in curRev){if(curRev[sk]<=0)continue;var si=D.txSkus[sk];var cat=D.txCats[si[2]];var m=assortSynMargin(si[0],cat);var cm=catM[cat]||(catM[cat]={s:0,n:0});cm.s+=m;cm.n++;}
+    function marg(sk){var si=D.txSkus[sk];return assortSynMargin(si[0],D.txCats[si[2]]);}
+    function high(sk){var si=D.txSkus[sk];var cm=catM[D.txCats[si[2]]];var mean=cm?cm.s/cm.n:50;return marg(sk)>=mean;}
+    return {win:win,C:C,curRev:curRev,prevRev:prevRev,curQty:curQty,comAbc:comAbc,marg:marg,high:high,N:Object.keys(curRev).filter(function(k){return curRev[k]>0;}).length};}
+  function adxAssets(){
+    if(typeof ov2Assets==='function')ov2Assets();
+    if(typeof document==='undefined'||!document.head||document.getElementById('adx-style'))return;
+    var s=document.createElement('style');s.id='adx-style';s.textContent=`
+.adx{--ink:#2A2A2A;--sub:#7c7f83;--line:#ECEAE4;--panel:#fff;--bg:#F7F6F2;--good:#207E66;--warn:#C08A1E;--bad:#C7001F;--brand:#2A2A2A;font-family:'Montserrat',system-ui,'Segoe UI',sans-serif;color:var(--ink)}
+.adx *{box-sizing:border-box}
+.adx .adx-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:2px 0 16px}
+.adx h1{font-family:'Unbounded','Segoe UI',sans-serif;font-weight:800;font-size:26px;letter-spacing:-.5px;margin:0}
+.adx .adx-sub{color:var(--sub);font-size:12.5px;margin-top:7px}
+.adx .adx-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.adx select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font:inherit;max-width:260px}
+.adx .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.adx .seg button{border:0;background:var(--panel);color:var(--sub);font:inherit;font-size:12px;padding:9px 13px;cursor:pointer}
+.adx .seg button.on{background:var(--ink);color:#fff;font-weight:600}
+.adx .note{background:#FFF7E6;border:1px solid #F3D98A;color:#7a5b00;border-radius:10px;padding:9px 13px;font-size:12px;margin-bottom:16px}
+.adx .metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.adx .metric{padding:15px 16px;background:var(--panel);border:1px solid var(--line);border-radius:13px}
+.adx .metric small{display:block;color:var(--sub);font-size:12px}
+.adx .metric .v{display:block;font-family:'Unbounded','Segoe UI',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.4px;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+.adx .metric .c{font-size:11px;color:var(--sub)}
+.adx .cols{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:16px}
+.adx .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-width:0}
+.adx .panel h2{font-size:15px;font-weight:700;margin:0}
+.adx .ptitle{font-size:12px;color:var(--sub);margin:4px 0 16px}
+.adx .plot{height:290px;position:relative;margin-right:6px}
+.adx .field{position:absolute;left:44px;right:10px;top:20px;bottom:40px;border-left:1px solid var(--line);border-bottom:1px solid var(--line)}
+.adx .thx{position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed var(--line)}
+.adx .thy{position:absolute;left:0;right:0;top:33.33%;border-top:1px dashed var(--line)}
+.adx .bub{position:absolute;transform:translate(-50%,50%);border:0;border-radius:50%;opacity:.82;cursor:pointer;padding:0}
+.adx .bub:hover,.adx .bub:focus-visible{opacity:1;outline:2px solid var(--ink);outline-offset:2px}
+.adx .tk{position:absolute;font-size:11px;color:var(--sub)}
+.adx .tk.y{left:-34px;transform:translateY(50%)}
+.adx .tk.x{bottom:-20px;transform:translateX(-50%)}
+.adx .ax{position:absolute;font-size:11px;color:var(--sub)}
+.adx .ax.y{top:-2px;left:0}.adx .ax.x{bottom:2px;right:4px}
+.adx .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:6px}
+.adx .legend i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:0}
+.adx .detail{min-height:34px;margin-top:10px;font-size:12.5px;color:var(--sub)}
+.adx .cli{display:block;text-align:left;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;padding:11px 0;cursor:pointer;border-bottom:1px solid var(--line)}
+.adx .cli:last-child{border-bottom:0}
+.adx .cli .r{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px}
+.adx .cli .r b{font-weight:700}
+.adx .track{height:7px;background:var(--bg);border-radius:5px;overflow:hidden}
+.adx .track>span{display:block;height:100%;background:var(--brand);border-radius:5px}
+.adx .cli small{display:block;color:var(--sub);font-size:11px;margin-top:6px}
+.adx .cli.on{background:var(--bg);border-radius:8px;padding-left:8px}
+.adx table{width:100%;border-collapse:collapse;font-size:12.5px}
+.adx th{text-align:right;color:var(--sub);font-weight:600;padding:9px 8px;border-bottom:1px solid var(--line)}
+.adx td{padding:11px 8px;border-bottom:1px solid #F4F2EC;text-align:right;font-variant-numeric:tabular-nums}
+.adx th:first-child,.adx td:first-child{text-align:left}
+.adx td small{display:block;color:var(--sub);font-size:11px}
+.adx tr:last-child td{border-bottom:0}
+.adx .act{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--tone) 14%,transparent);color:var(--tone)}
+.adx .tblwrap{overflow-x:auto;max-height:520px}
+.adx .foot{font-size:11px;color:var(--sub);margin-top:10px}
+@media(max-width:900px){.adx .metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.adx .cols{grid-template-columns:1fr}}
+@media(max-width:520px){.adx .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+`;document.head.appendChild(s);
+  }
+  function assortPage(){
+    adxAssets();
+    if(!state.assortWin)state.assortWin=6;
+    var S=assortBuild();var win=S.win,N=S.N,T=D.turnover||{};
+    var sel=state.assortClient&&S.C[state.assortClient]?state.assortClient:null;
+    var MNn=['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    function dl(intd){return (intd%100)+' '+MNn[Math.floor(intd/100)%100]+' '+Math.floor(intd/10000);}
+    // ---- client penetration rows ----
+    var rows=[];for(var cn in S.C){var cur=S.C[cn].cur,prev=S.C[cn].prev;var cnet=0;for(var s in cur)cnet+=cur[s].net;if(cnet<=0)continue;
+      var n=Object.keys(cur).filter(function(k){return cur[k].net>0;}).length;var pn=Object.keys(prev).filter(function(k){return prev[k].net>0;}).length;
+      rows.push({name:cn,n:n,pn:pn,pen:N?n/N*100:0,d:n-pn,net:cnet});}
+    rows.sort(function(a,b){return b.net-a.net;});
+    // ---- items (portfolio or client) ----
+    function tone(r){return r<=2?'bad':(r===4?'good':'warn');}
+    function mk(sk,rev,qty,prevRev){var si=D.txSkus[sk];var art=si[0];var tv=T[art]||{};var dos=(tv.dos==null?null:tv.dos);
+      var m=S.marg(sk),hi=S.high(sk);var temp=prevRev>0?rev/prevRev*100:(rev>0?999:0);var st=assortStatus(prevRev,rev,temp);
+      var pr=assortPrio(dos,st,hi);return {sk:sk,name:si[1],art:art,cat:D.txCats[si[2]],rev:rev,qty:qty,margin:m,high:hi,dos:dos,abc:S.comAbc[sk]||'C',temp:temp,st:st,pr:pr,tone:tone(pr.r),frozen:(dos!=null&&dos>60)?(tv.frozen||0):(dos==null?(tv.frozen||0):0)};}
+    var items=[];
+    if(sel){var cur=S.C[sel].cur,prev=S.C[sel].prev;for(var s in cur){if(cur[s].net<=0)continue;items.push(mk(s,cur[s].net,cur[s].q,(prev[s]||{net:0}).net||0));}}
+    else{for(var s in S.curRev){if(S.curRev[s]<=0)continue;items.push(mk(s,S.curRev[s],0,S.prevRev[s]||0));}}
+    // ---- metrics ----
+    var revenue=items.reduce(function(a,b){return a+b.rev;},0);
+    var profit=items.reduce(function(a,b){return a+b.rev*b.margin/100;},0);
+    var marginPct=revenue?profit/revenue*100:0;
+    var pen=sel?(N?items.filter(function(x){return x.rev>0;}).length/N*100:0):(rows.length?rows.reduce(function(a,b){return a+b.pen;},0)/rows.length:0);
+    var slow=items.reduce(function(a,b){return a+(b.frozen||0);},0);
+    var m=[['Выручка',fmtMoney(revenue),(sel?esc(sel):'все клиенты')+' · '+win.W+' мес.'],
+      ['Валовая прибыль',fmtMoney(Math.round(profit)),'выручка − себестоимость (условно)'],
+      ['Маржинальность',pct(+marginPct.toFixed(1)),'взвешенная по выручке (условно)'],
+      ['Проникновение',pct(+pen.toFixed(1)),sel?('SKU из '+N):'среднее по клиентам'],
+      ['Медленные запасы',fmtMoney(slow),'оборач. > 60 дней · склад']];
+    var metrics='<div class="metrics">'+m.map(function(x){return '<div class="metric"><small>'+x[0]+'</small><span class="v">'+x[1]+'</span><span class="c">'+x[2]+'</span></div>';}).join('')+'</div>';
+    // ---- bubble map ----
+    var _byRev=items.slice().sort(function(a,b){return b.rev-a.rev;});
+    var _reds=_byRev.filter(function(d){return d.tone==='bad';}).slice(0,10);
+    var _seen={},mapItems=[];_byRev.slice(0,34).concat(_reds).forEach(function(d){if(!_seen[d.sk]){_seen[d.sk]=1;mapItems.push(d);}});
+    mapItems=mapItems.slice(0,44);
+    function gdelta(d){return (d.temp>=999)?200:Math.max(-100,Math.min(200,d.temp-100));} // рост в % относительно предыдущего периода
+    function gx(gd){return (gd+100)/300*100;}
+    window.__adxDet=mapItems.map(function(d){var gd=gdelta(d);var gtxt=(d.temp>=999)?'новый':((gd>=0?'+':'')+Math.round(gd)+'%');return d.name+' · '+(sel?esc(sel):esc(d.cat||'—'))+' · маржа '+d.margin+'% · динамика '+gtxt+' · '+fmtMoney(d.rev)+' · запас '+(d.dos==null?'∞':d.dos+' дн.')+' · '+d.pr.l;});
+    var maxrev=Math.max.apply(null,mapItems.map(function(x){return x.rev;}).concat([1]));
+    var bubbles=mapItems.map(function(d,i){var xx=gx(gdelta(d));var yy=Math.max(0,Math.min(100,(d.margin-10)/60*100));var sz=10+Math.sqrt(d.rev/maxrev)*38;
+      return '<button class="bub" type="button" onclick="adxShow('+i+')" title="'+esc(d.name)+'" style="left:'+xx.toFixed(1)+'%;bottom:'+yy.toFixed(1)+'%;width:'+sz.toFixed(0)+'px;height:'+sz.toFixed(0)+'px;background:var(--'+d.tone+')"></button>';}).join('');
+    var yticks=[10,30,50,70].map(function(v){return '<span class="tk y" style="bottom:'+((v-10)/60*100)+'%">'+v+'</span>';}).join('');
+    var xticks=[-100,-50,0,50,100,200].map(function(v){return '<span class="tk x" style="left:'+gx(v)+'%">'+(v>0?'+':'')+v+'%</span>';}).join('');
+    var plot='<section class="panel"><h2>Карта товаров</h2><div class="ptitle">Маржа × темп роста · размер = выручка · клик по товару</div>'+
+      '<div class="plot"><span class="ax y">Маржа, %</span><span class="ax x">Темп роста к пред. периоду →</span><div class="field"><div class="thx" style="left:'+gx(0).toFixed(2)+'%"></div><div class="thy"></div>'+yticks+xticks+bubbles+'</div></div>'+
+      '<div class="legend"><span><i style="background:var(--good)"></i>Продвигать</span><span><i style="background:var(--warn)"></i>Контролировать</span><span><i style="background:var(--bad)"></i>Рассмотреть вывод</span></div>'+
+      '<div class="detail" id="adxdet">Выберите круг, чтобы увидеть показатели товара.</div></section>';
+    // ---- client potential ----
+    var cliHtml=rows.slice(0,10).map(function(c){return '<button type="button" class="cli '+(sel===c.name?'on':'')+'" onclick="setAssortClient(\x27'+(c.name||'').replace(/\x27/g,'')+'\x27)"><span class="r">'+esc(c.name)+'<b>'+pct(+c.pen.toFixed(1))+'</b></span><div class="track"><span style="width:'+Math.max(2,Math.min(100,c.pen))+'%"></span></div><small>'+c.n+' из '+N+' SKU · '+(c.d>=0?'+':'')+c.d+' за период</small></button>';}).join('');
+    var cliPanel='<section class="panel"><h2>Потенциал клиентов</h2><div class="ptitle">Доля закупаемого ассортимента · из '+N+' SKU</div>'+(cliHtml||'<div class="foot">нет данных</div>')+'</section>';
+    // ---- action table ----
+    var tItems=items.slice().sort(function(a,b){return a.pr.r-b.pr.r||b.rev-a.rev;}).slice(0,80);
+    function dtemp(x){if(x.st==='Ввод')return '<span class="act" style="--tone:var(--good)">ввод</span>';if(x.st==='Вывод')return '<span class="act" style="--tone:var(--bad)">вывод</span>';return (x.temp>=999?'—':(x.temp-100>=0?'+':'')+Math.round(x.temp-100)+'%');}
+    var trows=tItems.map(function(d){return '<tr><td>'+esc(d.name)+'<small>'+(sel?esc(sel):esc(d.cat||'—'))+'</small></td><td>'+d.abc+'</td><td>'+fmtMoney(d.rev)+'</td><td>'+d.margin+'%</td><td>'+(d.dos==null?'∞':d.dos)+'</td><td>'+dtemp(d)+'</td><td style="text-align:left"><span class="act" style="--tone:var(--'+d.tone+')">'+d.pr.l+'</span></td></tr>';}).join('');
+    var table='<section class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px"><div><h2>План действий</h2><div class="ptitle" style="margin:4px 0 0">Проблемные запасы — в начале списка</div></div><span class="foot">'+tItems.length+' позиций</span></div>'+
+      '<div class="tblwrap"><table><thead><tr><th>Товар / '+(sel?'клиент':'категория')+'</th><th>ABC</th><th>Выручка</th><th>Маржа</th><th>Запас, дни</th><th>Продажи Δ</th><th style="text-align:left">Рекомендация</th></tr></thead><tbody>'+(trows||'<tr><td colspan=7 style="text-align:center;color:var(--sub);padding:20px">нет данных</td></tr>')+'</tbody></table></div>'+
+      '<div class="foot">Маржа и себестоимость — условные (демо), заменить при загрузке реальных. ABC — по выручке портфеля. Медленные запасы — оборачиваемость > 60 дней, склад «Лакония».</div></section>';
+    // ---- assemble ----
+    var opts='<option value="all"'+(sel?'':' selected')+'>Все клиенты</option>'+rows.slice(0,120).map(function(c){return '<option value="'+esc(c.name)+'"'+(sel===c.name?' selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+    var winSeg='<span class="seg">'+[[3,'3 мес'],[6,'6 мес'],[12,'12 мес']].map(function(o){return '<button class="'+(win.W===o[0]?'on':'')+'" onclick="setAssortWin('+o[0]+')">'+o[1]+'</button>';}).join('')+'</span>';
+    var head='<div class="adx-head"><div><h1>Развитие ассортимента</h1><div class="adx-sub">Прибыльность, запасы и возможности роста · '+dl(win.now0)+' → '+dl(win.maxd)+'</div></div>'+
+      '<div class="adx-tools">'+winSeg+'<select onchange="setAssortClient(this.value)">'+opts+'</select></div></div>';
+    var demo='<div class="note">⚠ Себестоимость и маржа — условные (фантазийные), сгенерированы по артикулу для логики и визуала. Заменить при загрузке реальной себестоимости.</div>';
+    return '<div class="adx">'+head+demo+metrics+'<div class="cols">'+plot+cliPanel+'</div>'+table+'</div>';
+  }
+  window.adxShow=function(i){var e=document.getElementById('adxdet');if(e&&window.__adxDet&&window.__adxDet[i]!=null)e.textContent=window.__adxDet[i];};
+  window.setAssortWin=function(w){state.assortWin=w;if(window.render)render();};
+  window.setAssortClient=function(n){state.assortClient=(n==='all'?null:n);if(window.render)render();scrollTo&&scrollTo(0,0);};
+
+  window.render=function render(){const app=$('#app');let page='';if(state.page==='overview')page=overviewPage();else if(state.page==='sales')page=salesPage();else if(state.page==='regions')page=regionsPage();else if(state.page==='managers')page=managerPage();else if(state.page==='clients')page=clientsPage();else if(state.page==='logistics')page=logisticsPage();else if(state.page==='signals')page=signalsPage();else if(state.page==='abc')page=abcPage();else if(state.page==='turnover')page=turnoverPage();else if(state.page==='assort')page=assortPage();app.innerHTML=`<div class="app">${topbar()}<main class="main">${page}<div class="footer-note">Кайрос · прототип дашборда V3 · данные из текущих Excel отмечены в интерфейсе</div></main></div>`;bind();}
   function bind(){
     $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{state.page=b.dataset.nav;if(state.page!=='clients')state.client=null;render();scrollTo(0,0)}));
     $('#periodSelect')?.addEventListener('change',e=>{state.period=e.target.value;render()});
@@ -455,7 +929,7 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 
   window.PERIOD=window.PERIOD||{mode:'ytd'};
   function periodRange(){
-    var P=window.PERIOD;
+    var P=window.PERIOD||{mode:'ytd'};
     if(P.mode==='custom'&&P.from&&P.to){return [parseInt(P.from.replace(/-/g,'')),parseInt(P.to.replace(/-/g,''))];}
     if(P.mode&&/^y\d{4}$/.test(P.mode)){var yy=P.mode.slice(1);return [parseInt(yy+'0101'),parseInt(yy+'1231')];}
     if(P.mode&&/^\d{4}-\d{2}$/.test(P.mode)){var y=P.mode.slice(0,4),m=P.mode.slice(5,7);return [parseInt(y+m+'01'),parseInt(y+m+'31')];}
@@ -464,11 +938,12 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   function recompute(){
     var D=window.KRS_DATA; if(!D.tx){return;}
     var rg=periodRange(), lo=rg[0], hi=rg[1], yr=Math.floor(lo/10000);
-    var sales=0, qty=0, ordersSet={}, clientsSet={}, byMonth={}, byCat={}, byBrand={}, compRev={}, perClient={};
+    var sales=0, qty=0, ordersSet={}, clientsSet={}, byMonth={}, byCat={}, byBrand={}, byReg={}, compRev={}, perClient={};
     for(var i=0;i<D.tx.length;i++){var t=D.tx[i]; var d=t[0]; if(d<lo||d>hi)continue;
       var net=t[4], cix=t[1], sk=t[2];
       sales+=net; qty+=t[3]; clientsSet[cix]=1; ordersSet[cix+'|'+d]=1;
       byMonth[(''+d).slice(0,6)]=(byMonth[(''+d).slice(0,6)]||0)+net;
+      var rgn=(D.clientRegion&&D.clientRegion[D.txClients[cix]]); if(rgn&&rgn!=='Не распределён'&&net>0)byReg[rgn]=(byReg[rgn]||0)+net;
       var si=D.txSkus[sk]; byCat[D.txCats[si[2]]]=(byCat[D.txCats[si[2]]]||0)+net;
       var br=si[3]||'HeadRock'; byBrand[br]=(byBrand[br]||0)+net;
       if(net>0)compRev[sk]=(compRev[sk]||0)+net;
@@ -521,6 +996,13 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       }
       nc.sort(function(a,b){return b.sales-a.sales;});
       if(nc.length)D.clients=nc;
+    }catch(e){}
+    // топ-10 клиентов и товаров за выбранный период (следуют за фильтром)
+    try{
+      var tc=[];for(var cx2 in perClient){var p2=perClient[cx2];if(p2.net>0){var nm2=D.txClients[cx2];if(nm2)tc.push({name:nm2,sales:Math.round(p2.net),share:+(p2.net/(sales||1)*100).toFixed(1)});}}
+      tc.sort(function(a,b){return b.sales-a.sales;});o.topClients=tc.slice(0,10);
+      o.topProducts=Object.keys(compRev).map(function(k){return {sku:k,v:compRev[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,10).map(function(x){var si=D.txSkus[x.sku]||['','',0];return {name:si[1],sales:Math.round(x.v)};});
+      o.regions=Object.keys(byReg).map(function(r){return {name:r,value:Math.round(byReg[r])};}).sort(function(a,b){return b.value-a.value;}).slice(0,8);
     }catch(e){}
     var lbl=window.PERIOD.mode==='custom'?(window.PERIOD.from+' — '+window.PERIOD.to):(window.PERIOD.mode==='ytd'?'весь 2026':window.PERIOD.mode);
     setTimeout(function(){var el=document.getElementById('pInfo'); if(el)el.textContent='Показано: '+lbl+' · '+fmtMoney(sales)+' · '+nClients+' клиентов';},50);
