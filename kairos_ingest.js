@@ -210,6 +210,44 @@ KI.loadSalesRows = async function (blob, progress) {
   return rows;
 };
 
+
+/* ───────────── слияние нескольких файлов продаж (история + свежий) ─────────────
+ * Как в rebuild.py: каждый год берётся из того файла, где по нему больше документов (в свежем файле бывают единичные документы прошлых лет —
+ * например, возвраты — они не должны вытеснять полную историю). */
+function docInfo(rows) {            // годы документов верхнего уровня и последняя дата
+  var names = [], years = {}, maxd = 0, rx = /от (\d{2})\.(\d{2})\.(\d{4})/;
+  for (var i = 0; i < rows.length; i++) {
+    var lvl = rows[i][0], name = rows[i][1];
+    if (name == null) { names[lvl] = null; names.length = lvl + 1; continue; }
+    var parent = names[lvl - 1]; names[lvl] = name; names.length = lvl + 1;
+    if (isDoc(name) && !isDoc(parent || '')) { var m = rx.exec(name); if (m) { years[+m[3]] = (years[+m[3]] || 0) + 1; var d = +(m[3] + m[2] + m[1]); if (d > maxd) maxd = d; } }
+  }
+  return { years: years, maxd: maxd };
+}
+KI.filterYear = function (rows, keep) {
+  var out = [], skip = null, names = [], rx = /от (\d{2})\.(\d{2})\.(\d{4})/;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i], lvl = row[0], name = row[1];
+    if (skip !== null) { if (lvl > skip) continue; skip = null; }
+    if (name == null) { names[lvl] = null; names.length = lvl + 1; out.push(row); continue; }
+    var parent = names[lvl - 1]; names[lvl] = name; names.length = lvl + 1;
+    if (isDoc(name) && !isDoc(parent || '')) { var m = rx.exec(name); if (m && !keep[+m[3]]) { skip = lvl; continue; } }
+    out.push(row);
+  }
+  return out;
+};
+function periodStartYear(rows) {      // «Период: 01.01.2024 - …» в шапке отчёта
+  var txt = (rows.header || []).map(function (c) { return c.filter(function (x) { return x != null; }).join(' '); }).join('\n'), m = /Период:\s*\d{2}\.\d{2}\.(\d{4})/.exec(txt);
+  return m ? +m[1] : null;
+}
+KI.mergeSales = function (list) {
+  var minY = Math.min.apply(null, list.map(periodStartYear).filter(function (y) { return y; }).concat([9999]));
+  var infos = list.map(docInfo), owner = {};
+  infos.forEach(function (inf, idx) { Object.keys(inf.years).forEach(function (y) { if (+y < minY) return; var o = owner[y]; if (o === undefined || inf.years[y] > infos[o].years[y] || (inf.years[y] === infos[o].years[y] && inf.maxd > infos[o].maxd)) owner[y] = idx; }); });
+  var order = list.map(function (_, i) { return i; }).sort(function (a, b) { return infos[a].maxd - infos[b].maxd; }), out = [];
+  order.forEach(function (idx) { var keep = {}; Object.keys(owner).forEach(function (y) { if (owner[y] === idx) keep[y] = 1; }); out = out.concat(KI.filterYear(list[idx], keep)); });
+  out.header = list[0].header; return out;
+};
 /* ───────────── порт parse_sales ───────────── */
 KI.parseSales = function (rows, P, curYear) {
   var n = rows.length, stack = [], orderStack = [];
@@ -634,10 +672,14 @@ KI.nrm = nrm; KI.cid = cid; KI.mkPrice = mkPrice;
 KI.run = async function (files, D, onStage) {
   var P = mkPrice(D.refs || {}), st = onStage || function () {}, rows = null, S = null, stock, expiryRaw, notes = [], head = '', pm = null;
   var cur = (D.refDate ? +String(D.refDate).slice(0, 4) : 2026);
-  if (files.sales) {
-    st('Читаю файл продаж…', 0);
-    rows = await KI.loadSalesRows(files.sales, function (p) { st('Читаю файл продаж…', p); });
+  if (files.sales && [].concat(files.sales).length) {
+    var sfiles = [].concat(files.sales), parts = [];
+    for (var fi = 0; fi < sfiles.length; fi++) {
+      st('Читаю файл продаж ' + (sfiles.length > 1 ? (fi + 1) + ' из ' + sfiles.length : '') + '…', 0);
+      parts.push(await KI.loadSalesRows(sfiles[fi], function (p) { st('Читаю файл продаж…', p); }));
+    }
     st('Считаю продажи…', 1);
+    rows = KI.mergeSales(parts);
     await new Promise(function (r) { setTimeout(r, 20); });
     var hdr = rows.header || []; head = hdr.map(function (c) { return c.filter(function (x) { return x != null; }).join(' '); }).join('\n');
     if (head.indexOf('Партнер.Бизнес-регион') < 0) throw new Error('Это не отчёт «Продажи по бизнес регионам»: в шапке нет колонки «Партнер.Бизнес-регион». Выгрузите отчёт из 1С в том же виде, что и раньше (иерархия: бизнес-регион → партнёр → заказ → номенклатура).');
@@ -656,7 +698,7 @@ KI.run = async function (files, D, onStage) {
   await new Promise(function (r) { setTimeout(r, 20); });
   var K = KI.buildKRS(S, stock, expiryRaw, { D: D, P: P });
   K.refs = Object.assign({}, D.refs || {}, { stock: stock, expiry: expiryRaw });
-  K.__ingest = { at: new Date().toISOString(), files: { sales: files.sales && files.sales.name || null, stock: files.stock && files.stock.name || null, expiry: files.expiry && files.expiry.name || null },
+  K.__ingest = { at: new Date().toISOString(), files: { sales: files.sales ? [].concat(files.sales).map(function (f) { return f.name; }).join(', ') : null, stock: files.stock && files.stock.name || null, expiry: files.expiry && files.expiry.name || null },
     warns: chk.warns, info: chk.info, notes: notes };
   return K;
 };

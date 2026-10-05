@@ -7,8 +7,12 @@ const R=__dirname+path.sep;
   let depth=0,j=i,inStr=false,esc=false; // границы JSON-объекта
   for(;j<html.length;j++){const c=html[j]; if(inStr){ if(esc)esc=false; else if(c==='\\')esc=true; else if(c==='"')inStr=false; continue;} if(c==='"')inStr=true; else if(c==='{')depth++; else if(c==='}'&&--depth===0){j++;break;}}
   const D=JSON.parse(html.slice(i,j));
-  const files={sales:await fs.openAsBlob(R+'Продажи по бизнес регионам 24г-26г.xlsx'),stock:await fs.openAsBlob(R+'Остатки и доступность по сериям.xlsx'),expiry:await fs.openAsBlob(R+'Отчет по товарам на складах с окончанием срока годности.xlsx')};
-  files.sales.name='sales.xlsx';
+  const DATA=R+'Продажи и остатки'+path.sep, pick=(...c)=>c.find(f=>fs.existsSync(f))||c[c.length-1];
+  const fHist=pick(DATA+'Продажи по бизнес регионам 24г-26г.xlsx',R+'Продажи по бизнес регионам 24г-26г.xlsx'), fCur=DATA+'Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx';
+  const fStock=pick(DATA+'Остатки и доступность товаров (по сериям) 05.10.xlsx',DATA+'Остатки и доступность по сериям.xlsx',R+'Остатки и доступность по сериям.xlsx');
+  const sales=[await fs.openAsBlob(fHist)]; sales[0].name=path.basename(fHist);
+  if(fs.existsSync(fCur)){ const b=await fs.openAsBlob(fCur); b.name=path.basename(fCur); sales.push(b); }   // как в rebuild.py: история + свежий 2026
+  const files={sales,stock:await fs.openAsBlob(fStock),expiry:await fs.openAsBlob(R+'Отчет по товарам на складах с окончанием срока годности.xlsx')};
   const t0=Date.now(); const K=await KI.run(files,D,()=>{});
   console.log('пересчёт за',((Date.now()-t0)/1000).toFixed(1),'с; данные на',K.dataAsOfHuman,'| нетто',Math.round(K.overview.sales));
   const diffs=[];

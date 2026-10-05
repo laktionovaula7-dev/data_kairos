@@ -67,7 +67,7 @@ function mb(n) { return (n / 1048576).toFixed(1) + ' МБ'; }
 
 var KINDS = [
   { id: 'sales', title: 'Продажи по бизнес-регионам', req: true, re: /продаж/i,
-    hint: '1С → отчёт «Продажи по бизнес регионам», период с 01.01.2024 по сегодня, подразделения Москва / HeadRock МСК / Владивосток / HeadRock Владивосток / СЕТИ, бренды ENKI, KRONbuild, HeadRock. Сохранить в .xlsx без изменений.' },
+    hint: '1С → отчёт «Продажи по бизнес регионам», период с 01.01.2024 по сегодня, подразделения Москва / HeadRock МСК / Владивосток / HeadRock Владивосток / СЕТИ, бренды ENKI, KRONbuild, HeadRock. Сохранить в .xlsx без изменений. Можно выбрать два файла: полную историю и свежий период — каждый год берётся из файла, где по нему больше данных.' },
   { id: 'stock', title: 'Остатки и доступность по сериям', req: false, re: /остатк|доступн/i, hint: 'Отчёт «Остатки и доступность по сериям», все склады. Если не выбирать — останутся прежние остатки.' },
   { id: 'expiry', title: 'Товары с окончанием срока годности', req: false, re: /годност|срок/i, hint: 'Отчёт «Товары на складах с окончанием срока годности». Если не выбирать — останутся прежние сроки.' }
 ];
@@ -86,12 +86,12 @@ function nowText() {
 
 function render() {
   var box = document.getElementById('ki-box'); if (!box) return;
-  var ok = !!files.sales;
+  var ok = !!(files.sales && [].concat(files.sales).length);
   var rows = KINDS.map(function (k) {
-    var f = files[k.id];
+    var f = files[k.id], fl = Array.isArray(f) ? f : (f ? [f] : []);
     return '<div class="ki-row"><div><b>' + k.title + '</b><em class="' + (k.req ? '' : 'opt') + '">' + (k.req ? 'обязательно' : 'по желанию') + '</em></div>' +
-      '<div><button class="ki-btn" data-pick="' + k.id + '">' + (f ? 'Заменить' : 'Выбрать файл') + '</button></div>' +
-      (f ? '<div class="ki-file">✓ ' + esc(f.name) + ' · ' + mb(f.size) + '</div>' : '<small>' + k.hint + '</small>') + '</div>';
+      '<div><button class="ki-btn" data-pick="' + k.id + '">' + (fl.length ? 'Заменить' : 'Выбрать файл') + '</button></div>' +
+      (fl.length ? fl.map(function (x) { return '<div class="ki-file">✓ ' + esc(x.name) + ' · ' + mb(x.size) + '</div>'; }).join('') : '<small>' + k.hint + '</small>') + '</div>';
   }).join('');
   box.innerHTML = '<div class="ki-h"><div><h2>Обновить данные из 1С</h2><p>Выберите свежие выгрузки — дашборд пересчитается прямо в браузере, ничего никуда не отправляется.</p></div><button class="ki-x" data-x>×</button></div>' +
     '<div class="ki-b"><div class="ki-now">' + nowText() + '</div>' +
@@ -115,7 +115,8 @@ function assign(list) {
   list.forEach(function (f) {
     if (!/\.xlsx$/i.test(f.name)) { unknown.push(f.name + ' (нужен .xlsx)'); return; }
     var k = KINDS.filter(function (x) { return x.re.test(f.name); })[0];
-    if (k) files[k.id] = f; else unknown.push(f.name);
+    if (k && k.id === 'sales') { files.sales = (files.sales || []).filter(function (x) { return x.name !== f.name; }).concat([f]); }
+    else if (k) files[k.id] = f; else unknown.push(f.name);
   });
   render();
   if (unknown.length) out('<div class="ki-w">Не удалось определить тип файла: ' + unknown.map(esc).join(', ') + '. Нажмите «Выбрать файл» в нужной строке.</div>');
@@ -125,7 +126,7 @@ function out(h) { var o = document.getElementById('ki-out'); if (o) o.innerHTML 
 function bindBox(box) {
   [].forEach.call(box.querySelectorAll('[data-x]'), function (b) { b.onclick = close; });
   [].forEach.call(box.querySelectorAll('[data-pick]'), function (b) {
-    b.onclick = function () { var id = b.getAttribute('data-pick'); pickFile('.xlsx', function (l) { files[id] = l[0]; render(); }); };
+    b.onclick = function () { var id = b.getAttribute('data-pick'); pickFile(id === 'sales' ? 'multi' : '.xlsx', function (l) { if (id === 'sales') files.sales = l; else files[id] = l[0]; render(); }); };
   });
   var dz = box.querySelector('#ki-drop');
   if (dz) {
@@ -145,7 +146,7 @@ function bindBox(box) {
 }
 
 function run() {
-  if (busy || !files.sales) return; busy = true;
+  if (busy || !(files.sales && [].concat(files.sales).length)) return; busy = true;
   var go = document.getElementById('ki-go'); if (go) go.disabled = true;
   out('<div id="ki-st" style="font-size:13px;font-weight:600">Начинаю…</div><div class="ki-bar"><i id="ki-pb"></i></div><small style="color:#727987">Файл продаж большой (≈18 МБ) — обычно это занимает 10–40 секунд. Не закрывайте вкладку.</small>');
   var base = current(), t0 = Date.now();
