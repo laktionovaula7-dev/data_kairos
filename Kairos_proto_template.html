@@ -1453,13 +1453,12 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var __base=null,__cl=D.clients||[];for(var __i=0;__i<__cl.length;__i++){if(__cl[__i].id===state.client){__base=__cl[__i];break;}}
     if(!__base&&D.clientDetail)__base=D.clientDetail[state.client]||D.clientDetail[D.defaultClient];if(!__base)__base={name:'—',manager:'—',status:'Активный'};
     var c=clientByPeriod(Object.assign({},__base)),A=mcxAgg(),r=null;A.rows.forEach(function(x){if(x.name===c.name)r=x;});
-    var tabs=[['overview','Обзор'],['assortment','Ассортимент и ABC'],['sales','Продажи'],['recommendations','Рекомендации'],['company','Компания']];
-    if(['overview','assortment','sales','recommendations','company'].indexOf(state.clientTab)<0)state.clientTab='overview';
+    var tabs=[['overview','Обзор'],['assortment','Ассортимент и ABC'],['recommendations','Рекомендации'],['company','Компания']];
+    if(['overview','assortment','recommendations','company'].indexOf(state.clientTab)<0)state.clientTab='overview';
     var body='';
     if(state.clientTab==='overview')body=cdOverview(c,A,r);
     else if(state.clientTab==='assortment')body=cdAssort(c);
-    else if(state.clientTab==='sales')body=clientSales(c);
-    else if(state.clientTab==='recommendations')body=clientCrossSell(c.name);
+    else if(state.clientTab==='recommendations')body=stubPage('Рекомендации','chart','В разработке','Рекомендации по клиенту и формирование КП появятся здесь. Пока смотрите вкладку «Ассортимент и ABC»: там видно, что клиент берёт и не берёт относительно компании.');
     else body=clientCompany(c);
     var days=r?r.days:null,lastTxt=(days==null)?(c.last||'—'):(days<=0?'сегодня':days+' дн. назад');
     var kv=[['Заказов',c.orders,'уникальные документы'],['Средний заказ',fmtMoney(c.avgOrder||0),''],['Продано, шт',(c.units||0).toLocaleString('ru-RU'),''],
