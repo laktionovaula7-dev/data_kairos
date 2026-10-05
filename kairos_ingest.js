@@ -427,7 +427,7 @@ KI.buildKRS = function (S, stock, expiryRaw, ctx) {
   cReg.forEach(function (reg, nm) {
     var ch = cChan.get(nm);
     if (ch === 'СЕТИ') { cMgr[nm] = null; return; }
-    if (reg === 'Москва') { var resp = String((crmOf(nm) || {}).responsible || '').trim(); cMgr[nm] = (resp === 'Максим Чашников' || resp === 'Василий Димитрюк') ? resp : 'Не назначен'; }
+    if (reg === 'Москва') { var resp = String((crmOf(nm) || {}).responsible || '').trim(); cMgr[nm] = (resp === 'Максим Чашников' || resp === 'Василий Димитрюк') ? resp : 'Максим Чашников'; }
     else if (SNG_REG[reg]) cMgr[nm] = 'Сергей Сидоров';
     else if (OKRUG_MGR[reg]) cMgr[nm] = OKRUG_MGR[reg];
     else cMgr[nm] = 'Не назначен';

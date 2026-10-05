@@ -677,7 +677,7 @@ def build_krs(S, stock, plan, crm, price):
         if ch=='СЕТИ': cMgr[nm]=None; continue          # у сетей менеджеров не берём
         if reg=='Москва':
             resp=(crm_of(nm) or {}).get('responsible','').strip()
-            cMgr[nm]=resp if resp in ('Максим Чашников','Василий Димитрюк') else 'Не назначен'
+            cMgr[nm]=resp if resp in ('Максим Чашников','Василий Димитрюк') else 'Максим Чашников'   # Москва без ответственного в CRM -> Чашников
         elif reg in ('Беларусь','Казахстан','Кыргызстан','СНГ'): cMgr[nm]='Сергей Сидоров'
         elif reg in OKRUG_MGR: cMgr[nm]=OKRUG_MGR[reg]
         else: cMgr[nm]='Не назначен'
