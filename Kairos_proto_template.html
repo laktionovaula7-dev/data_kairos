@@ -1004,8 +1004,8 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       +'<div><div class="mx-dv">'+cmp+'<span class="mx-du">компаний</span></div><div class="mx-dl">в портфелях менеджеров</div></div>'
       +'<div><div class="mx-dv">'+Math.round(team/(A.total||1)*100)+'%</div><div class="mx-dl">доля менеджеров в продажах компании (остальное — сети и без закрепления)</div></div>'
       +'<div><div class="mx-dv">'+(named[0]?esc(named[0].name.split(' ')[1]||named[0].name):'—')+'</div><div class="mx-dl">лидер по продажам · '+(named[0]?Math.round(named[0].s/(team||1)*100):0)+'% команды</div></div></div></div>';
-    return hero+grp('Владивосток',named.filter(function(m){return m.fil==='Владивосток';}))+grp('Москва',named.filter(function(m){return m.fil==='Москва';}))+grp('Без менеджера',none,'нет ответственного в CRM')
-      +'<div class="mx-note">Менеджер относится к филиалу, где у него больше продаж. Продажи сетей к менеджерам не относятся. Клиенты Москвы закрепляются по полю «Ответственный» в CRM (Чашников или Димитрюк); если ответственного нет или компании нет в CRM — клиент относится к Максиму Чашникову. Клик по карточке — портфель менеджера.</div>';
+    return hero+grp('Владивосток',named.filter(function(m){return m.fil==='Владивосток';}))+grp('Москва',named.filter(function(m){return m.fil==='Москва';}))
+      +'<div class="mx-note">Менеджер относится к филиалу, где у него больше продаж. Продажи сетей к менеджерам не относятся. '+(none.length?('Не показаны компании без региона в отчёте продаж: '+none.reduce(function(a,m){return a+m.n;},0)+' на '+fmtMoney(none.reduce(function(a,m){return a+m.s;},0))+'. '):'')+'Клиенты Москвы закрепляются по полю «Ответственный» в CRM (Чашников или Димитрюк); если ответственного нет или компании нет в CRM — клиент относится к Максиму Чашникову. Клик по карточке — портфель менеджера.</div>';
   }
 
   /* ---------- МЕНЕДЖЕР: детализация ---------- */
