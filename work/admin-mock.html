@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Кайрос — доступы (админка)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EFF0ED;--card:#fff;--ink:#23242A;--mut:#86888D;--ln:#E9E9E4;--sft:#F5F6F3;--grp:#23252B;
+  --up:#1F9E74;--dn:#C7001F;--gradC:linear-gradient(90deg,#FDCF08,#FF7A00,#C7001F);}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 24px 70px}
+.note{color:var(--mut);font-size:12.5px;margin-bottom:16px}.note b{color:var(--ink)}
+
+/* шапка */
+.head{display:flex;align-items:center;gap:14px;margin:6px 0 20px}
+.head h1{font-family:Unbounded,sans-serif;font-weight:800;font-size:24px;margin:0;letter-spacing:-.01em}
+.head .sub{color:var(--mut);font-size:12.5px;margin-top:3px}
+.head .add{margin-left:auto;border:0;border-radius:11px;background:#23252B;color:#fff;font:inherit;font-weight:700;font-size:13px;padding:11px 18px;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.head .add:hover{background:#000}
+
+/* сводка */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:15px 18px;position:relative;overflow:hidden}
+.kpi:first-child:before{content:"";position:absolute;inset:0;background-image:linear-gradient(218deg,rgba(253,207,8,.20) 0%,rgba(255,122,0,.13) 18%,rgba(199,0,31,.07) 34%,rgba(255,255,255,0) 64%);pointer-events:none}
+.kpi .l{font-size:11.5px;color:var(--mut);position:relative}
+.kpi .v{font-family:Unbounded,sans-serif;font-weight:800;font-size:26px;margin-top:6px;position:relative}
+
+/* панель фильтров */
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.bar input{flex:1;min-width:200px;border:1px solid var(--ln);background:#FBFBF9;border-radius:999px;padding:9px 15px;font:inherit;font-size:13px;color:var(--ink)}
+.chip{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;color:#3a3c42;cursor:pointer}
+.chip.on{background:#23252B;border-color:#23252B;color:#fff}
+
+/* таблица */
+.tbl-card{background:var(--card);border:1px solid var(--ln);border-radius:16px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:12px 16px;border-bottom:1px solid var(--ln);background:var(--sft)}
+th.c,td.c{text-align:center}
+td{padding:12px 16px;border-bottom:1px solid var(--ln);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.u{display:flex;align-items:center;gap:11px}
+.ava{width:36px;height:36px;border-radius:50%;background:#EDEDE8;border:1px solid var(--ln);display:flex;align-items:center;justify-content:center;font-family:Unbounded;font-weight:700;font-size:12px;color:#5a5c62;flex:none;overflow:hidden}
+.ava img{width:100%;height:100%;object-fit:cover}
+.u .nm{font-weight:700}.u .fl{font-size:11.5px;color:var(--mut);margin-top:1px}
+.login{font-family:'Montserrat';font-size:12.5px;color:#4a4d52;background:#F4F5F2;border:1px solid var(--ln);border-radius:7px;padding:5px 11px;display:inline-block}
+.role{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;border-radius:999px;padding:5px 12px}
+.role.admin{background:#FFF0D6;color:#8a5a00;border:1px solid #F3D59B}
+.role.mgr{background:#EEF1F4;color:#4a5566;border:1px solid #E1E5EA}
+.scope{font-size:11.5px;color:#6b6e72;max-width:190px;line-height:1.35}
+.last{font-size:12px;color:#6b6e72}
+/* переключатель доступа */
+.sw{position:relative;width:42px;height:24px;border-radius:999px;background:#D7D8D3;cursor:pointer;transition:background .18s;border:0;flex:none}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .18s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.sw.on{background:#1F9E74}.sw.on:after{left:21px}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+.ib{border:1px solid var(--ln);background:#fff;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;color:#3a3c42;cursor:pointer;white-space:nowrap}
+.ib:hover{background:var(--sft)}
+.ib.dn{color:#C7001F;border-color:#F3C9CF}
+.muted-row{opacity:.5}
+
+/* модалка добавления */
+.ovl{position:fixed;inset:0;background:rgba(20,20,22,.42);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+.ovl.show{display:flex}
+.modal{width:min(460px,100%);background:#fff;border-radius:18px;padding:26px 26px 22px;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+.modal h2{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;margin:0 0 4px}
+.modal .ms{color:var(--mut);font-size:12.5px;margin-bottom:18px}
+.modal label{display:block;font-size:12px;font-weight:700;color:#3a3c42;margin:12px 0 6px}
+.modal input,.modal select{width:100%;border:1px solid var(--ln);border-radius:10px;padding:11px 13px;font:inherit;font-size:13.5px;background:#FBFBF9;color:var(--ink)}
+.modal .mrow{display:flex;gap:12px}.modal .mrow>div{flex:1}
+.modal .mact{display:flex;gap:10px;margin-top:22px}
+.modal .mact .btn{flex:1;border:0;border-radius:11px;padding:12px;font:inherit;font-weight:700;font-size:14px;cursor:pointer}
+.modal .mact .prim{background:#23252B;color:#fff}.modal .mact .sec{background:#F1F0EC;color:#3a3c42}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.scope,.last{display:none}th.scope-h,th.last-h{display:none}}
+</style></head>
+<body>
+<div class="wrap">
+<div class="note">Макет на утверждение · <b>админка «Доступы»</b> (внутри дашборда). Выдача логинов, роли и доступ. Реальная авторизация — на сервере; здесь переключатели кликабельны для демонстрации.</div>
+
+<div class="head">
+  <div><h1>Доступы</h1><div class="sub">Пользователи системы · логины, роли и права доступа</div></div>
+  <button class="add" onclick="document.getElementById('ovl').classList.add('show')">+ Добавить пользователя</button>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="l">Всего пользователей</div><div class="v">14</div></div>
+  <div class="kpi"><div class="l">Активных</div><div class="v">11</div></div>
+  <div class="kpi"><div class="l">Администраторов</div><div class="v">2</div></div>
+  <div class="kpi"><div class="l">Отключены</div><div class="v">3</div></div>
+</div>
+
+<div class="bar">
+  <input placeholder="Найти по имени или логину…">
+  <span class="chip on">Все</span><span class="chip">Админы</span><span class="chip">Менеджеры</span><span class="chip">Отключённые</span>
+</div>
+
+<div class="tbl-card">
+<table>
+  <thead><tr>
+    <th>Пользователь</th><th>Логин</th><th>Роль</th><th class="scope-h">Доступ к данным</th><th class="last-h">Последний вход</th><th class="c">Активен</th><th class="c">Действия</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td><div class="u"><div class="ava">ЮЛ</div><div><div class="nm">Юлия Лактионова</div><div class="fl">Головной офис</div></div></div></td>
+      <td><span class="login">admin</span></td>
+      <td><span class="role admin">★ Админ</span></td>
+      <td class="scope">Вся компания · все разделы</td>
+      <td class="last">сегодня, 09:14</td>
+      <td class="c"><button class="sw on" onclick="this.classList.toggle('on')"></button></td>
+      <td><div class="acts"><button class="ib">Сбросить пароль</button></div></td>
+    </tr>
+    <tr>
+      <td><div class="u"><div class="ava">МЧ</div><div><div class="nm">Максим Чашников</div><div class="fl">Филиал Москва</div></div></div></td>
+      <td><span class="login">m.chashnikov</span></td>
+      <td><span class="role admin">★ Админ</span></td>
+      <td class="scope">Вся компания · все разделы</td>
+      <td class="last">вчера, 18:02</td>
+      <td class="c"><button class="sw on" onclick="this.classList.toggle('on')"></button></td>
+      <td><div class="acts"><button class="ib">Сбросить пароль</button></div></td>
+    </tr>
+    <tr>
+      <td><div class="u"><div class="ava">ДЖ</div><div><div class="nm">Дмитрий Жигалов</div><div class="fl">Филиал Владивосток</div></div></div></td>
+      <td><span class="login">d.zhigalov</span></td>
+      <td><span class="role mgr">Менеджер</span></td>
+      <td class="scope">Свои клиенты и регионы · без админки</td>
+      <td class="last">сегодня, 08:40</td>
+      <td class="c"><button class="sw on" onclick="this.classList.toggle('on')"></button></td>
+      <td><div class="acts"><button class="ib">Сбросить пароль</button><button class="ib dn">Отключить</button></div></td>
+    </tr>
+    <tr>
+      <td><div class="u"><div class="ava">ЕЗ</div><div><div class="nm">Елена Зареева</div><div class="fl">Филиал Владивосток</div></div></div></td>
+      <td><span class="login">e.zareeva</span></td>
+      <td><span class="role mgr">Менеджер</span></td>
+      <td class="scope">Свои клиенты и регионы · без админки</td>
+      <td class="last">3 дн. назад</td>
+      <td class="c"><button class="sw on" onclick="this.classList.toggle('on')"></button></td>
+      <td><div class="acts"><button class="ib">Сбросить пароль</button><button class="ib dn">Отключить</button></div></td>
+    </tr>
+    <tr class="muted-row">
+      <td><div class="u"><div class="ava">СИ</div><div><div class="nm">Сергей Иванов</div><div class="fl">Филиал Новосибирск</div></div></div></td>
+      <td><span class="login">s.ivanov</span></td>
+      <td><span class="role mgr">Менеджер</span></td>
+      <td class="scope">Свои клиенты и регионы · без админки</td>
+      <td class="last">—</td>
+      <td class="c"><button class="sw" onclick="this.classList.toggle('on')"></button></td>
+      <td><div class="acts"><button class="ib">Выдать доступ</button></div></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+<!-- модалка добавления -->
+<div class="ovl" id="ovl">
+  <div class="modal">
+    <h2>Новый пользователь</h2>
+    <div class="ms">Выдайте логин и роль. Пароль сгенерируется и покажется один раз.</div>
+    <label>Имя сотрудника</label>
+    <input placeholder="Фамилия Имя">
+    <div class="mrow">
+      <div><label>Логин</label><input placeholder="i.ivanov"></div>
+      <div><label>Роль</label><select><option>Менеджер</option><option>Администратор</option></select></div>
+    </div>
+    <label>Филиал</label>
+    <select><option>Москва</option><option>Владивосток</option><option>Новосибирск</option><option>Головной офис</option></select>
+    <label>Доступ к данным</label>
+    <select><option>Свои клиенты и регионы</option><option>Весь филиал</option><option>Вся компания</option></select>
+    <div class="mact"><button class="btn sec" onclick="document.getElementById('ovl').classList.remove('show')">Отмена</button><button class="btn prim" onclick="document.getElementById('ovl').classList.remove('show')">Создать и выдать доступ</button></div>
+  </div>
+</div>
+<script>
+document.querySelectorAll('.bar .chip').forEach(function(c){c.addEventListener('click',function(){document.querySelectorAll('.bar .chip').forEach(function(x){x.classList.remove('on');});c.classList.add('on');});});
+document.getElementById('ovl').addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+</script>
+</body></html>

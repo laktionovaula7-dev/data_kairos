@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI-блок — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EFF0ED;--card:#fff;--ink:#23242A;--mut:#86888D;--ln:#E6E6E1;--sft:#F4F5F2;--grp:#23252B;
+--gradC:linear-gradient(90deg,#FDCF08,#FF7A00,#C7001F);
+--gradL:linear-gradient(218deg,rgba(253,207,8,.9) 0%,rgba(255,122,0,.8) 13%,rgba(199,0,31,.62) 27%,rgba(255,255,255,0) 55%);
+--gradSoft:linear-gradient(218deg,rgba(253,207,8,.5) 0%,rgba(255,122,0,.4) 14%,rgba(199,0,31,.28) 30%,rgba(255,255,255,0) 58%)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 24px 60px}
+.vh{font-family:Unbounded,sans-serif;font-weight:700;font-size:15px;margin:30px 0 4px}
+.vn{font-size:12.5px;color:var(--mut);margin-bottom:12px}
+.un{font-family:Unbounded,sans-serif}.up{color:#1F9E74;font-weight:700}.dn{color:#C7001F;font-weight:700}
+.chip{color:var(--mut);font-size:12.5px;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:18px}
+
+/* ---- Variant 1: тотал на мягком градиенте, план-полоса градиент, компактно ---- */
+.v1{overflow:hidden}
+.v1 .top{display:grid;grid-template-columns:1.1fr 1px 1.3fr}
+.v1 .cell{padding:18px 22px}
+.v1 .prodcell{background:#fff;background-image:var(--gradSoft);background-repeat:no-repeat}
+.v1 .div{background:var(--ln)}
+.v1 .l{font-size:12.5px;color:var(--mut)}
+.v1 .row{display:flex;align-items:center;gap:14px;margin:6px 0 4px;flex-wrap:wrap}
+.v1 .big{font-family:Unbounded,sans-serif;font-weight:800;font-size:34px;line-height:1}
+.v1 .d{font-family:Unbounded,sans-serif;font-size:15px}
+.v1 .sub{font-size:11.5px;color:var(--mut)}
+.v1 .pbig{font-family:Unbounded,sans-serif;font-weight:800;font-size:34px;line-height:1}
+.v1 .track{height:13px;border-radius:999px;background:#EDEDE8;overflow:hidden;margin-top:10px}
+.v1 .track>span{display:block;height:100%;background:var(--gradC);border-radius:999px}
+.v1 .metrics{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--ln)}
+.v1 .m{padding:12px 18px;border-left:1px solid var(--ln)}.v1 .m:first-child{border-left:0}
+.v1 .ml{font-size:11.5px;color:var(--mut)}
+.v1 .mrow{display:flex;align-items:baseline;gap:8px;margin-top:5px;flex-wrap:wrap}
+.v1 .mv{font-family:Unbounded,sans-serif;font-weight:800;font-size:19px}
+.v1 .md{font-size:12px;font-weight:700}
+
+/* ---- Variant 2: тотал — отдельная акцент-карточка с градиентом ---- */
+.v2{display:grid;grid-template-columns:300px 1fr;gap:14px}
+.v2 .hero{border-radius:18px;padding:20px 22px;background:#fff;background-image:var(--gradL);background-repeat:no-repeat;border:1px solid var(--ln);display:flex;flex-direction:column;justify-content:center}
+.v2 .hero .l{font-size:12px;color:#7a5b2a;font-weight:600}
+.v2 .hero .big{font-family:Unbounded,sans-serif;font-weight:800;font-size:33px;line-height:1.05;margin:8px 0 6px}
+.v2 .hero .d{font-family:Unbounded;font-size:14px}.v2 .hero .sub{font-size:11.5px;color:#8a6d3a}
+.v2 .right{background:#fff;border:1px solid var(--ln);border-radius:18px;padding:18px 20px}
+.v2 .prow{display:flex;align-items:center;gap:14px}
+.v2 .ppct{font-family:Unbounded,sans-serif;font-weight:800;font-size:30px}
+.v2 .track{flex:1;height:13px;border-radius:999px;background:#EDEDE8;overflow:hidden}
+.v2 .track>span{display:block;height:100%;background:var(--gradC);border-radius:999px}
+.v2 .psub{font-size:11.5px;color:var(--mut);margin-top:6px}
+.v2 .metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-top:1px solid var(--ln);margin-top:14px;padding-top:4px}
+.v2 .m{padding:10px 14px;border-left:1px solid var(--ln)}.v2 .m:first-child{border-left:0}
+.v2 .ml{font-size:11px;color:var(--mut)}.v2 .mv{font-family:Unbounded;font-weight:800;font-size:17px;margin-top:4px}.v2 .md{font-size:11.5px;font-weight:700}
+
+/* ---- Variant 3: одна компактная строка ---- */
+.v3{display:flex;align-items:stretch;gap:0;overflow:hidden}
+.v3 .prodcell{padding:16px 20px;background:#fff;background-image:var(--gradSoft);background-repeat:no-repeat;min-width:250px}
+.v3 .l{font-size:12px;color:var(--mut)}
+.v3 .big{font-family:Unbounded;font-weight:800;font-size:28px;line-height:1;margin-top:5px}
+.v3 .d{font-family:Unbounded;font-size:13px;margin-left:8px}
+.v3 .plan{padding:16px 20px;border-left:1px solid var(--ln);min-width:230px;display:flex;flex-direction:column;justify-content:center}
+.v3 .ppct{font-family:Unbounded;font-weight:800;font-size:24px}
+.v3 .track{height:11px;border-radius:999px;background:#EDEDE8;overflow:hidden;margin-top:8px}.v3 .track>span{display:block;height:100%;background:var(--gradC);border-radius:999px}
+.v3 .mstrip{flex:1;display:grid;grid-template-columns:repeat(5,1fr)}
+.v3 .m{padding:16px 14px;border-left:1px solid var(--ln);display:flex;flex-direction:column;justify-content:center}
+.v3 .ml{font-size:11px;color:var(--mut)}.v3 .mv{font-family:Unbounded;font-weight:800;font-size:17px;margin-top:4px}.v3 .md{font-size:11.5px;font-weight:700}
+@media(max-width:900px){.v1 .top{grid-template-columns:1fr}.v1 .div{display:none}.v2{grid-template-columns:1fr}.v1 .metrics,.v2 .metrics,.v3 .mstrip{grid-template-columns:repeat(2,1fr)}.v3{flex-direction:column}}
+</style></head>
+<body>
+<div class="wrap">
+<div class="chip">Срез: вся компания · весь период · <b>3 варианта KPI-блока</b> — цифры реальные</div>
+
+<div class="vh">Вариант 1 — тотал на мягком градиенте, план-полоса градиентом, компактно</div>
+<div class="vn">Градиент мягкий на белом (угол), план-полоса — фирменный градиент вместо чёрной. Высота меньше.</div>
+<div class="card v1">
+  <div class="top">
+    <div class="cell prodcell"><div class="l">Продажи</div><div class="row"><div class="big">1 128,9 млн ₽</div><div class="d up">▲ +6,3%</div></div><div class="sub">к тому же периоду 2025 года</div></div>
+    <div class="div"></div>
+    <div class="cell"><div class="l">Выполнение плана</div><div class="row"><div class="pbig">77%</div></div><div class="track"><span style="width:77%"></span></div><div class="sub" style="margin-top:7px">План 1 460,5 млн ₽ · До плана 331,6 млн ₽</div></div>
+  </div>
+  <div class="metrics" id="m1"></div>
+</div>
+
+<div class="vh">Вариант 2 — «Продажи» отдельной акцент-карточкой с градиентом</div>
+<div class="vn">Тотал — выразительная карточка с градиентом (Rectangle 1), справа план + метрики компактно.</div>
+<div class="v2">
+  <div class="hero"><div class="l">Продажи · срез</div><div class="big">1 128,9<br>млн ₽</div><div><span class="d up">▲ +6,3%</span></div><div class="sub">к периоду 2025</div></div>
+  <div class="right">
+    <div class="l" style="font-size:12.5px;color:var(--mut)">Выполнение плана</div>
+    <div class="prow" style="margin-top:8px"><div class="ppct">77%</div><div class="track"><span style="width:77%"></span></div></div>
+    <div class="psub">План 1 460,5 млн ₽ · До плана 331,6 млн ₽</div>
+    <div class="metrics" id="m2"></div>
+  </div>
+</div>
+
+<div class="vh">Вариант 3 — одна компактная строка (минимум высоты)</div>
+<div class="vn">Самый компактный: тотал с мягким градиентом, план-полоса градиентом, метрики в ряд.</div>
+<div class="card v3">
+  <div class="prodcell"><div class="l">Продажи</div><div class="big">1 128,9 млн ₽ <span class="d up">▲ +6,3%</span></div><div class="l" style="margin-top:5px">к периоду 2025</div></div>
+  <div class="plan"><div class="l">Выполнение плана</div><div class="ppct">77%</div><div class="track"><span style="width:77%"></span></div></div>
+  <div class="mstrip" id="m3"></div>
+</div>
+
+</div>
+<script>
+var M=[['Клиенты','785','-14,2%',0],['Дни покупок','5 554','-13,2%',0],['Ср. продажи/день','203 261 ₽','+22,4%',1],['Продано, шт','5 328 318','+10,5%',1],['SKU','848','',null]];
+function cells(cls){return M.map(function(m){var d=m[3]===null?'':'<span class="md '+(m[3]?'up':'dn')+'">'+(m[3]?'▲ ':'▼ ')+m[2]+'</span>';return '<div class="m"><div class="ml">'+m[0]+'</div><div class="mrow" style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap"><div class="mv">'+m[1]+'</div>'+d+'</div></div>';}).join('');}
+document.getElementById('m1').innerHTML=cells();
+document.getElementById('m2').innerHTML=cells();
+document.getElementById('m3').innerHTML=cells();
+</script>
+</body></html>

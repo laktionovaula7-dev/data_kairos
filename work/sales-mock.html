@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Макет — Продажи</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EFF0ED;--card:#fff;--soft:#F6F6F3;--ink:#23242A;--mut:#86888D;--line:#E6E6E1;--line2:#F0F0EB;
+--graph:#23252B;--ac:#F2541B;--ye:#FDCF08;--gr:#1F9E74;--rd:#C7001F;--bl:#2E7CD6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px}
+.wrap{max-width:1380px;margin:0 auto;padding:0 28px 60px}
+.un{font-family:Unbounded,sans-serif}.mut{color:var(--mut)}
+.top{display:flex;align-items:center;gap:26px;padding:18px 28px;position:sticky;top:0;background:rgba(239,240,237,.92);backdrop-filter:blur(8px);z-index:50}
+.brand{font-family:Unbounded,sans-serif;font-weight:800;font-size:19px}
+.brand span{color:var(--mut);font-weight:500;margin-left:6px;font-size:14px}
+.nav{display:flex;gap:26px;font-weight:600;font-size:15px}
+.nav a{color:var(--mut);text-decoration:none;padding:6px 0;border-bottom:2px solid transparent}
+.nav a.on{color:var(--ink);border-color:var(--graph)}
+.hdr{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 18px;margin:6px 0 14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tabs{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:4px}
+.tabs button{border:0;background:none;font:inherit;font-weight:600;font-size:14px;color:var(--mut);padding:9px 18px;border-radius:999px;cursor:pointer}
+.tabs button.on{background:var(--graph);color:#fff}
+.spacer{flex:1}
+.hbtn{display:inline-flex;align-items:center;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:10px 14px;font:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer}
+.hbtn.on{background:var(--graph);color:#fff;border-color:var(--graph)}
+.hbtn .cnt{background:var(--ac);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;font-weight:700}
+/* filters panel (раскрыто) */
+.fpanel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:12px}
+.fphead{display:flex;align-items:center;margin-bottom:14px}
+.fphead b{font-weight:700;font-size:13px}
+.fphead .x{margin-left:auto;color:var(--mut);cursor:pointer;font-size:13px}
+.fgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.ff{display:flex;flex-direction:column;gap:5px}
+.ff label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);font-weight:700}
+.ff .sel{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.ff .sel.active{border-color:var(--graph)}
+.ff .sel .i{color:var(--mut)}
+.pop{margin-top:6px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 10px 26px rgba(0,0,0,.09);padding:8px}
+.pop input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;margin-bottom:6px}
+.pop .o{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:13px;border-radius:7px;cursor:pointer}
+.pop .o:hover{background:var(--soft)}
+.pop .o input{width:auto;margin:0}
+.fpfoot{display:flex;gap:10px;margin-top:14px}
+.btn{border:1px solid var(--line);background:var(--soft);font:inherit;font-weight:600;font-size:13px;padding:9px 16px;border-radius:10px;cursor:pointer}
+.btn.pri{background:var(--graph);color:#fff;border-color:var(--graph)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 18px;padding-left:2px}
+.chip{background:var(--graph);color:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.chip b{color:var(--ye);margin-left:6px;cursor:pointer}
+.reset{color:var(--ac);font-weight:600;font-size:12.5px;cursor:pointer}
+.row{display:grid;gap:16px;margin-bottom:16px}
+.row.r2{grid-template-columns:1.35fr 1fr}
+.row.k5{grid-template-columns:repeat(5,1fr)}
+.row.r55{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px 22px}
+.ct{font-weight:700;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.ct .r{margin-left:auto;text-transform:none;letter-spacing:0;color:var(--mut);font-weight:500}
+/* hero graphite */
+.hero{background:var(--graph);color:#fff;border:0;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;background:rgba(253,207,8,.10)}
+.hero .lbl{color:rgba(255,255,255,.55);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.hero .big{font-family:Unbounded,sans-serif;font-weight:800;font-size:54px;line-height:1;margin:14px 0 10px}
+.hero .big .cur{color:var(--ye)}
+.hero .sub{color:rgba(255,255,255,.8);font-size:13px;margin:2px 0}
+.hero .ret{color:var(--ye);font-weight:700;font-size:13px;margin-top:4px}
+.hero hr{border:0;border-top:1px solid rgba(255,255,255,.14);margin:18px 0}
+.hmetrics{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.hm{display:flex;align-items:baseline;gap:8px}
+.hm .n{font-family:Unbounded,sans-serif;font-weight:700;font-size:16px}
+.hm .k{color:rgba(255,255,255,.55);font-size:11px}
+.up{color:#43D19B}.dn{color:#FF8787}
+/* kpi light cards */
+.kc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px}
+.kc .kl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);font-weight:700}
+.kc .kv{font-family:Unbounded,sans-serif;font-weight:800;font-size:24px;margin-top:9px}
+.kc .kd{font-size:12px;margin-top:6px;color:var(--mut)}
+.kc .kd .up{color:var(--gr)}.kc .kd .dn{color:var(--rd)}
+/* plan */
+.plan .big{font-family:Unbounded,sans-serif;font-weight:800;font-size:50px;line-height:1;margin:6px 0 14px}
+.track{height:12px;border-radius:999px;background:var(--line2);overflow:hidden}
+.track>span{display:block;height:100%;background:var(--graph);border-radius:999px}
+.fils{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.fil{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.fil .fn{font-size:12px;color:var(--mut);font-weight:600}
+.fil .fv{font-family:Unbounded,sans-serif;font-weight:800;font-size:17px;margin:4px 0 8px}
+.fil .ft{height:7px;border-radius:999px;background:var(--line2);overflow:hidden}
+.fil .ft>span{display:block;height:100%;background:var(--graph)}
+/* months */
+.months{display:flex;align-items:flex-end;gap:10px;height:210px;padding-top:8px}
+.mo{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%}
+.mpct{font-size:12px;font-weight:800;color:var(--mut)}
+.mpct.g{color:var(--gr)}.mpct.a{color:#B07A00}.mpct.r{color:var(--rd)}
+.bars{display:flex;gap:3px;align-items:flex-end;justify-content:center;flex:1;width:100%}
+.bf{width:14px;border-radius:40px;background:var(--graph)}
+.bp{width:14px;border-radius:40px;background:#DEDCD4}
+.ml{font-size:11px;color:var(--mut)}
+.leg{display:flex;gap:16px;font-size:12px;color:var(--mut);align-items:center}
+.leg i{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
+/* geo */
+.reg{display:grid;grid-template-columns:minmax(0,1fr) 44px 150px 56px;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line2);font-size:13.5px}
+.reg .rn{font-weight:600;display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.reg .rn i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.abcb{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px}
+.abcA{background:#E9F5EF;color:var(--gr)}.abcB{background:#F3EEDD;color:#B07A00}.abcC{background:#EFEFE9;color:#777}
+.reg .rv{text-align:right;font-weight:600;white-space:nowrap}
+.reg .rs{text-align:right;color:var(--mut);font-size:12px}
+.mapbox{background:var(--soft);border:1px solid var(--line);border-radius:14px;min-height:380px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.maphint{position:absolute;top:12px;left:14px;font-size:11px;color:var(--mut);font-weight:600}
+/* categories */
+.cp2{display:grid;grid-template-columns:.92fr 1.04fr;gap:28px;align-items:start}
+.cg-wrap{position:relative;width:100%;max-width:360px;margin:4px auto 2px}
+.cg-c{position:absolute;left:0;right:0;top:62%;transform:translateY(-50%);text-align:center}
+.cg-l{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.cg-n{font-family:Unbounded,sans-serif;font-weight:800;font-size:38px;margin-top:2px}
+.cg-u{font-size:13px;color:var(--mut);font-weight:600}
+.leaders{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 14px}
+.lead{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px}
+.lead .d{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+.lead .p{font-family:Unbounded,sans-serif;font-weight:800;font-size:22px}
+.lead .nm{font-size:12px;color:#6b6e72;margin-top:3px}
+.cleg{display:grid;grid-template-columns:14px 1fr auto 110px;gap:12px;align-items:center;font-size:13px;padding:5px 0}
+.cleg i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.cleg b{font-family:Unbounded,sans-serif;font-weight:800;font-size:13px}
+.cleg .v{color:var(--mut);text-align:right}
+.ct-sub{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:14px}
+.prod{display:flex;align-items:center;gap:11px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:7px 15px 7px 8px;margin-bottom:7px;position:relative;overflow:hidden}
+.prod .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(46,124,214,.18),rgba(46,124,214,.05));border-radius:999px}
+.prod>*{position:relative}
+.prod .rk{width:25px;height:25px;border-radius:50%;background:var(--graph);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.prod .pn{flex:1;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.prod .pv{font-family:Unbounded,sans-serif;font-weight:700;font-size:13px;white-space:nowrap}
+/* table */
+.seg{display:inline-flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}
+.seg button{border:1px solid var(--line);background:var(--soft);font:inherit;font-weight:600;font-size:13px;color:var(--mut);padding:8px 14px;border-radius:10px;cursor:pointer}
+.seg button.on{background:var(--graph);color:#fff;border-color:var(--graph)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;background:var(--soft);color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:10px 12px}
+th.n,td.n{text-align:right}
+td{padding:11px 12px;border-bottom:1px solid var(--line2)}
+tr:hover td{background:var(--soft)}
+.note{font-size:12px;color:var(--mut);margin-top:10px;line-height:1.5}
+.banner{background:#F3F4F2;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--mut);margin:16px 0}
+@media(max-width:1000px){.row.r2,.row.r55,.cp2{grid-template-columns:1fr}.row.k5{grid-template-columns:repeat(2,1fr)}.fgrid{grid-template-columns:repeat(2,1fr)}.hmetrics{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand">Кайрос<span>Аналитика</span></div>
+  <nav class="nav"><a>Обзор</a><a class="on">Продажи</a><a>Менеджеры и клиенты</a><a>Склад</a></nav>
+</div>
+<div class="wrap">
+  <div class="banner">Макет v2 для согласования: светлее и нейтральнее «Обзора», акцент — графитовый герой. Цифры демо, карта — наша интерактивная (зум по округу). Панель фильтров показана раскрытой.</div>
+
+  <div class="hdr">
+    <div class="tabs"><button class="on">Результаты продаж</button><button>Ассортимент и ABC</button></div>
+    <div class="spacer"></div>
+    <button class="hbtn">Весь 2026 <span class="i" style="color:var(--mut)">▾</span></button>
+    <button class="hbtn on">⛭ Фильтры <span class="cnt">3</span></button>
+  </div>
+
+  <div class="fpanel">
+    <div class="fphead"><b>Фильтры среза</b><span class="x">свернуть ✕</span></div>
+    <div class="fgrid">
+      <div class="ff"><label>Филиал</label><div class="sel active">Москва <span class="i">▾</span></div></div>
+      <div class="ff"><label>Регион</label><div class="sel active">Южный ФО <span class="i">▾</span></div></div>
+      <div class="ff"><label>Город</label><div class="sel">— все — <span class="i">▾</span></div></div>
+      <div class="ff"><label>Менеджер</label><div class="sel">— все — <span class="i">▾</span></div></div>
+      <div class="ff"><label>Бренд</label><div class="sel active">KRONbuild <span class="i">▾</span>
+        <div class="pop">
+          <input placeholder="поиск бренда…">
+          <label class="o"><input type="checkbox" checked> KRONbuild</label>
+          <label class="o"><input type="checkbox"> HeadRock</label>
+          <label class="o"><input type="checkbox"> ENKI</label>
+        </div></div></div>
+      <div class="ff"><label>Категория</label><div class="sel">— все — <span class="i">▾</span></div></div>
+      <div class="ff"><label>Товар</label><div class="sel">— все — <span class="i">▾</span></div></div>
+    </div>
+    <div class="fpfoot"><button class="btn pri">Применить</button><button class="btn">Сбросить срез</button></div>
+  </div>
+
+  <div class="chips">
+    <span class="chip">Филиал: Москва <b>✕</b></span>
+    <span class="chip">Южный ФО <b>✕</b></span>
+    <span class="chip">KRONbuild <b>✕</b></span>
+    <span class="reset">Сбросить всё</span>
+  </div>
+
+  <div class="row r2">
+    <div class="card hero">
+      <div class="lbl">Продажи · выбранный срез</div>
+      <div class="big">781,4 <span class="cur">млн ₽</span></div>
+      <div class="sub">продажи 781 443 210 ₽</div>
+      <div class="ret">возвраты −9 120 540 ₽</div>
+      <hr>
+      <div class="hmetrics">
+        <div class="hm"><span class="n up">Δ +6,3%</span><span class="k">дельта к прошлому году</span></div>
+        <div class="hm"><span class="n">2,2%</span><span class="k">доля возвратов</span></div>
+      </div>
+    </div>
+    <div class="card plan">
+      <div class="ct">Выполнение плана · срез <span class="r">год</span></div>
+      <div class="big">77%</div>
+      <div class="track"><span style="width:77%"></span></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mut);margin-top:6px"><span>0</span><span>план 1 015 млн ₽</span></div>
+      <div class="fils">
+        <div class="fil"><div class="fn">Москва</div><div class="fv">337,7 млн ₽</div><div class="ft"><span style="width:41%"></span></div></div>
+        <div class="fil"><div class="fn">Южный ФО</div><div class="fv">61,7 млн ₽</div><div class="ft"><span style="width:58%"></span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row k5" id="kpis"></div>
+
+  <div class="card">
+    <div class="ct">Продажи по месяцам <span class="leg r"><span><i style="background:#23252B"></i>факт</span><span><i style="background:#DEDCD4"></i>прошлый год</span></span></div>
+    <div class="months" id="months"></div>
+    <div class="note">Проценты над барами — Δ дельта к тому же месяцу прошлого года.</div>
+  </div>
+
+  <div class="row r55">
+    <div class="card">
+      <div class="ct">Регионы и покрытие <span class="r">доля в срезе</span></div>
+      <div id="reglist"></div>
+      <div class="note">Клик по региону добавляет фильтр. Регион → города. Для городов без продаж — переключатель «Все / Есть продажи / Нет продаж».</div>
+    </div>
+    <div class="card">
+      <div class="ct">География <span class="r">продажи по округам</span></div>
+      <div class="mapbox"><span class="maphint">наша интерактивная карта · зум по округу</span><svg width="86%" viewBox="0 0 400 230"><path d="M20 150 Q60 60 150 70 Q260 40 380 90 Q360 180 250 180 Q140 210 60 190 Z" fill="#2E7CD6" opacity=".12" stroke="#2E7CD6" stroke-width="1.5"/><path d="M150 70 Q220 95 250 150 Q200 175 150 160 Q120 120 150 70 Z" fill="#2E7CD6" opacity=".45"/><text x="200" y="125" text-anchor="middle" font-family="Unbounded" font-size="13" fill="#86888D">RU</text></svg></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cp2">
+      <div>
+        <div style="font-family:Unbounded;font-weight:700;font-size:15px;margin-bottom:2px">Категории по продажам</div>
+        <div style="font-size:12px;color:var(--mut);margin-bottom:8px">Доля в срезе</div>
+        <div class="cg-wrap"><svg viewBox="0 0 300 165" id="gauge"></svg>
+          <div class="cg-c"><div class="cg-l">Выручка среза</div><div class="cg-n">781,4</div><div class="cg-u">млн ₽</div></div>
+        </div>
+        <div class="leaders">
+          <div class="lead"><span class="d" style="background:#2E7CD6"></span><div><div class="p">48%</div><div class="nm">Монтажные пены</div></div></div>
+          <div class="lead"><span class="d" style="background:#5BA3E8"></span><div><div class="p">22%</div><div class="nm">Герметики</div></div></div>
+        </div>
+        <div id="catleg"></div>
+      </div>
+      <div>
+        <div class="ct-sub">Топ-10 товаров</div>
+        <div id="top10"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Детализация продаж <span class="r">срез</span></div>
+    <div style="font-size:11px;color:var(--mut);margin-bottom:6px">разбить по:</div>
+    <div class="seg"><button class="on">Регионы</button><button>Города</button><button>Бренды</button><button>Товары</button><button>Категории</button><button>Менеджеры</button><button>Клиенты</button></div>
+    <table><thead><tr><th>Регион</th><th>ABC</th><th class="n">Продажи</th><th class="n">Доля</th><th class="n">Δ дельта</th><th class="n">Клиентов</th></tr></thead>
+    <tbody id="dtbl"></tbody></table>
+    <div class="note">Сортировка по любому числовому столбцу в обе стороны. Клик по клиенту/менеджеру — карточка; возврат восстанавливает срез.</div>
+  </div>
+</div>
+<script>
+var kpis=[['Клиенты','540','+4,1%',1],['Заказы','3 210','+7,8%',1],['Средний чек','243 400 ₽','−2,1%',0],['Штуки','1,21 млн','+2,8%',1],['Товары (SKU)','612','+5,0%',1]];
+document.getElementById('kpis').innerHTML=kpis.map(function(k){return '<div class="kc"><div class="kl">'+k[0]+'</div><div class="kv">'+k[1]+'</div><div class="kd"><span class="'+(k[3]?'up':'dn')+'">Δ '+k[2]+'</span> к прошлому году</div></div>';}).join('');
+
+var MN=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+var fact=[52,46,61,55,60,78,64,98,25,70,66,58],prev=[40,37,52,53,55,64,60,74,20,55,52,46];
+var mx=Math.max.apply(0,fact.concat(prev));
+document.getElementById('months').innerHTML=fact.map(function(f,i){var p=prev[i];var pc=Math.round(f/p*100-100);var cls=pc>=0?'g':(pc>=-15?'a':'r');return '<div class="mo"><div class="mpct '+cls+'">'+(pc>=0?'+':'')+pc+'%</div><div class="bars"><div class="bf" style="height:'+Math.round(f/mx*100)+'%"></div><div class="bp" style="height:'+Math.round(p/mx*100)+'%"></div></div><div class="ml">'+MN[i]+'</div></div>';}).join('');
+
+var regs=[['СЕТИ','A',347.6,30.8,'#23252B'],['Сибирский ФО','A',143.5,12.7,'#1F9E74'],['Дальневосточный ФО','A',137.7,12.2,'#1F9E74'],['Москва','B',117.2,10.4,'#B07A00'],['Уральский ФО','B',69.1,6.1,'#B07A00'],['Центральный ФО','B',65.5,5.8,'#B07A00'],['Поволжский ФО','C',64.6,5.7,'#C7001F'],['Южный ФО','C',61.7,5.5,'#C7001F'],['Северо-Западный ФО','C',20.8,1.8,'#C7001F']];
+document.getElementById('reglist').innerHTML=regs.map(function(r){return '<div class="reg"><span class="rn"><i style="background:'+r[4]+'"></i>'+r[0]+'</span><span class="abcb abc'+r[1]+'">'+r[1]+'</span><span class="rv">'+r[2].toFixed(1).replace('.',',')+' млн ₽</span><span class="rs">'+r[3].toFixed(1).replace('.',',')+'%</span></div>';}).join('');
+
+var cats=[['Монтажные пены',48,375,'#2E7CD6'],['Герметики',22,172,'#5BA3E8'],['Аэроз. краски',6,47,'#1F9E74'],['Клей',4,31,'#43B38A'],['Бур по бетону',3,23,'#8A6FD1'],['Пистолеты',3,23,'#B49AE6'],['Сверло',2,16,'#E0A33A'],['Крепёж',2,16,'#EFC06B'],['Инструмент',2,16,'#C78A5A'],['Прочее',1,8,'#9AA0A6'],['Другое',7,54,'#5F6166']];
+document.getElementById('catleg').innerHTML=cats.map(function(c){return '<div class="cleg"><i style="background:'+c[3]+'"></i><span>'+c[0]+'</span><b>'+c[1]+'%</b><span class="v">'+c[2]+' млн ₽</span></div>';}).join('');
+var cols=[];cats.forEach(function(c){var n=Math.max(1,Math.round(c[1]/100*42));for(var k=0;k<n;k++)cols.push(c[3]);});
+var T=cols.length,ribs='';for(var j=0;j<T;j++){var f=(j+0.5)/T,phi=-90+180*f,op=(1-0.14*f).toFixed(3);ribs+='<rect x="147" y="18" width="6" height="34" rx="3" fill="'+cols[j]+'" fill-opacity="'+op+'" transform="rotate('+phi.toFixed(1)+' 150 150)"></rect>';}
+document.getElementById('gauge').innerHTML=ribs;
+
+var prods=[['Проф. монтажная пена KRONbuild огнестойкая B1 65 л',117.8],['Полиуретановый герметик PU-40 (серый) 600мл',112.4],['Проф. пена Enki всесезонная 65',104.1],['Пена KRONbuild всесезонная ONE 65',69.2],['Клей-пена KRONbuild',63.5],['Пена ONE 65 Smart',49.1],['Пена всесезонная PRO 70',39.6],['Герметик универсальный',22.4],['Герметик PU-40 (чёрный)',21.6],['Пена Лето PRO 70',21.2]];
+var pmax=prods[0][1];
+document.getElementById('top10').innerHTML=prods.map(function(p,i){var w=Math.max(8,Math.round(p[1]/pmax*100));return '<div class="prod"><span class="fill" style="width:'+w+'%"></span><span class="rk">'+(i+1)+'</span><span class="pn">'+p[0]+'</span><span class="pv">'+p[1].toFixed(1).replace('.',',')+' млн ₽</span></div>';}).join('');
+
+document.getElementById('dtbl').innerHTML=regs.map(function(r){var d=Math.round(Math.random()*30-8);var cl=Math.round(r[2]*1.4);return '<tr><td>'+r[0]+'</td><td><span class="abcb abc'+r[1]+'">'+r[1]+'</span></td><td class="n">'+r[2].toFixed(1).replace('.',',')+' млн ₽</td><td class="n">'+r[3].toFixed(1).replace('.',',')+'%</td><td class="n" style="color:'+(d>=0?'#1F9E74':'#C7001F')+'">'+(d>=0?'+':'')+d+'%</td><td class="n">'+cl+'</td></tr>';}).join('');
+</script>
+</body>
+</html>

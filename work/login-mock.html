@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Кайрос — вход</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#23242A;--mut:#86888D;--ln:#E9E9E4;--grp:#23252B;
+  --gradC:linear-gradient(90deg,#FDCF08,#FF7A00,#C7001F);}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#EFF0ED;color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:min(920px,100%);background:#fff;border:1px solid var(--ln);border-radius:22px;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;box-shadow:0 30px 80px rgba(0,0,0,.10)}
+
+/* левая брендовая панель */
+.side{position:relative;background:#1b1c20;color:#fff;padding:46px 40px;display:flex;flex-direction:column;overflow:hidden}
+.side:before{content:"";position:absolute;inset:0;background-image:linear-gradient(210deg,rgba(253,207,8,.42) 0%,rgba(255,122,0,.30) 16%,rgba(199,0,31,.18) 32%,rgba(27,28,32,0) 60%);pointer-events:none}
+.side>*{position:relative}
+.brandline{display:flex;align-items:baseline;gap:10px}
+.brandline .k{font-family:Unbounded,sans-serif;font-weight:800;font-size:30px;letter-spacing:-.01em}
+.brandline .a{font-size:14px;color:rgba(255,255,255,.72);font-weight:500}
+.tag{margin-top:14px;font-size:14px;color:rgba(255,255,255,.80);line-height:1.5;max-width:300px}
+.accent{height:4px;width:66px;border-radius:999px;background:var(--gradC);margin:22px 0 0}
+.side .foot{margin-top:auto;font-size:12px;color:rgba(255,255,255,.64);line-height:1.5}
+.feats{margin-top:34px;display:flex;flex-direction:column;gap:14px}
+.feat{display:flex;align-items:center;gap:12px;font-size:13px;color:rgba(255,255,255,.88)}
+.feat i{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;flex:none}
+
+/* правая форма */
+.form{padding:46px 44px;display:flex;flex-direction:column;justify-content:center}
+.form h1{font-family:Unbounded,sans-serif;font-weight:700;font-size:22px;margin:0 0 6px}
+.form .sub{color:var(--mut);font-size:13px;margin-bottom:26px}
+label{display:block;font-size:12px;font-weight:700;color:#3a3c42;margin:0 0 7px;letter-spacing:.01em}
+.field{position:relative;margin-bottom:16px}
+.field input{width:100%;border:1px solid var(--ln);border-radius:12px;padding:13px 44px 13px 15px;font:inherit;font-size:14px;color:var(--ink);background:#FBFBF9;transition:border .15s,background .15s}
+.field input:focus{outline:none;border-color:#23252B;background:#fff}
+.field .eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);border:0;background:none;cursor:pointer;color:var(--mut);font-size:12px}
+.row{display:flex;align-items:center;justify-content:space-between;margin:2px 0 22px;font-size:12.5px}
+.row label.chk{display:flex;align-items:center;gap:8px;font-weight:500;color:#4a4d52;margin:0;cursor:pointer}
+.row a{color:#C7001F;text-decoration:none;font-weight:600}
+.btn{width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;font-size:15px;color:#2A2A2A;cursor:pointer;background-image:var(--gradC);transition:transform .15s,box-shadow .15s;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(0,0,0,.16)}
+.hint{margin-top:20px;font-size:12px;color:var(--mut);line-height:1.5;text-align:center}
+.seg{display:flex;gap:6px;background:#F4F5F2;border:1px solid var(--ln);border-radius:999px;padding:4px;margin-bottom:24px;width:fit-content}
+.seg button{border:0;background:none;border-radius:999px;padding:8px 18px;font:inherit;font-size:13px;font-weight:600;color:var(--mut);cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* пин */
+.pin{display:flex;gap:10px;margin-bottom:24px}
+.pin input{width:54px;height:62px;text-align:center;font-family:Unbounded,sans-serif;font-weight:700;font-size:24px;border:1px solid var(--ln);border-radius:14px;background:#FBFBF9;color:var(--ink)}
+.pin input:focus{outline:none;border-color:#23252B;background:#fff}
+.hide{display:none}
+@media(max-width:760px){.card{grid-template-columns:1fr}.side{display:none}.form{padding:38px 26px}}
+</style></head>
+<body>
+<div class="card">
+  <div class="side">
+    <div class="brandline"><span class="k">Кайрос</span><span class="a">аналитический дашборд</span></div>
+    <div class="tag">Продажи, менеджеры, клиенты и ассортимент — единая картина по компании.</div>
+    <div class="accent"></div>
+    <div class="feats">
+      <div class="feat"><i>📊</i>Продажи по регионам, брендам и планам</div>
+      <div class="feat"><i>👥</i>Менеджеры и клиенты с ABC и выгрузками</div>
+      <div class="feat"><i>🔒</i>Персональный доступ для каждого менеджера</div>
+    </div>
+    <div class="foot">© 2026 KRONbuild · ENKI · HeadRock<br>Доступ только для сотрудников компании.</div>
+  </div>
+
+  <div class="form">
+    <h1>Вход в систему</h1>
+    <div class="sub">Введите данные, выданные администратором.</div>
+
+    <div class="seg">
+      <button class="on" onclick="mode('pw')">Логин и пароль</button>
+      <button onclick="mode('pin')">По пин-коду</button>
+    </div>
+
+    <!-- логин/пароль -->
+    <form id="pw" onsubmit="return false">
+      <label>Логин</label>
+      <div class="field"><input type="text" placeholder="например, d.zhigalov" autocomplete="username"></div>
+      <label>Пароль</label>
+      <div class="field"><input id="pwf" type="password" placeholder="••••••••" autocomplete="current-password"><button type="button" class="eye" onclick="togg()">показать</button></div>
+      <div class="row"><label class="chk"><input type="checkbox">Запомнить меня</label><a href="#">Забыли пароль?</a></div>
+      <button class="btn">Войти</button>
+    </form>
+
+    <!-- пин -->
+    <form id="pin" class="hide" onsubmit="return false">
+      <label>Пин-код доступа</label>
+      <div class="pin"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"><input maxlength="1" inputmode="numeric"></div>
+      <button class="btn">Войти</button>
+    </form>
+
+    <div class="hint">Нет доступа? Обратитесь к администратору — он выдаёт логин и пароль в разделе «Доступы».</div>
+  </div>
+</div>
+<script>
+function mode(m){
+  document.getElementById('pw').classList.toggle('hide',m!=='pw');
+  document.getElementById('pin').classList.toggle('hide',m!=='pin');
+  document.querySelectorAll('.seg button').forEach(function(b,i){b.classList.toggle('on',(m==='pw')===(i===0));});
+}
+function togg(){var f=document.getElementById('pwf');f.type=f.type==='password'?'text':'password';}
+// авто-переход между клетками пина
+document.querySelectorAll('.pin input').forEach(function(inp,i,arr){
+  inp.addEventListener('input',function(){if(inp.value&&arr[i+1])arr[i+1].focus();});
+});
+</script>
+</body></html>

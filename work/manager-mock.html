@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Карточка менеджера — редизайн (сдержанно)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EFF0ED;--card:#fff;--ink:#23242A;--mut:#86888D;--ln:#E9E9E4;--sft:#F5F6F3;--grp:#23252B;
+  --up:#1F9E74;--dn:#C7001F;
+  --gradC:linear-gradient(90deg,#FDCF08,#FF7A00,#C7001F);
+  /* сдержанный градиент на белом (угол), для вторичных страниц */
+  --gradHero:linear-gradient(218deg,rgba(253,207,8,.34) 0%,rgba(255,122,0,.26) 15%,rgba(199,0,31,.16) 31%,rgba(255,255,255,0) 60%);
+  --gradAccent:linear-gradient(218deg,rgba(253,207,8,.22) 0%,rgba(255,122,0,.15) 16%,rgba(199,0,31,.08) 32%,rgba(255,255,255,0) 62%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 24px 70px}
+.note{color:var(--mut);font-size:12.5px;margin-bottom:16px}
+.note b{color:var(--ink)}
+.un{font-family:Unbounded,sans-serif}
+.up{color:var(--up);font-weight:700}.dn{color:var(--dn);font-weight:700}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:16px}
+.ct{font-family:Unbounded,sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.02em;color:#3a3c42;text-transform:uppercase}
+.ct .dot{color:#FF7A00;margin-right:7px}
+
+/* ---------- ШАПКА: фото + имя ---------- */
+.mhead{display:flex;align-items:center;gap:14px;margin:4px 0 16px}
+.ava{width:52px;height:52px;border-radius:50%;background:#EDEDE8;display:flex;align-items:center;justify-content:center;font-family:Unbounded;font-weight:700;font-size:18px;color:#5a5c62;border:1px solid var(--ln)}
+.mhead h1{font-family:Unbounded;font-weight:800;font-size:22px;margin:0;line-height:1.1}
+.mhead .sub{color:var(--mut);font-size:12.5px;margin-top:3px}
+
+/* ---------- БЛОК KPI: герой (сдержанный) + метрики ---------- */
+.kpi{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:stretch}
+.hero{position:relative;border:1px solid var(--ln);border-radius:16px;background:#fff;background-image:var(--gradHero);background-repeat:no-repeat;padding:20px 22px;display:flex;flex-direction:column;justify-content:center}
+.hero .l{font-size:11.5px;color:#8a6d3a;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+.hero .l .dot{color:#FF7A00;margin-right:6px}
+.hero .big{font-family:Unbounded;font-weight:800;font-size:33px;line-height:1.02;margin:10px 0 6px}
+.hero .d{font-family:Unbounded;font-size:14px}
+.hero .sub{font-size:11.5px;color:#8a6d3a;margin-top:2px}
+
+.metrics{border:1px solid var(--ln);border-radius:16px;background:#fff;display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden}
+.m{padding:16px 18px;border-left:1px solid var(--ln);border-top:1px solid var(--ln);display:flex;flex-direction:column;min-height:92px}
+.m:nth-child(3n+1){border-left:0}
+.m:nth-child(-n+3){border-top:0}
+.m .ml{font-size:11.5px;color:var(--mut);line-height:1.3;min-height:30px}
+.m .mv{font-family:Unbounded;font-weight:800;font-size:21px;margin-top:auto}
+.m .md{font-size:11.5px;color:var(--mut);margin-top:4px}
+.m .md .pct{font-weight:700;color:#3a3c42}
+
+/* ---------- ФИЛЬТРЫ (единый стиль контролов) ---------- */
+.filters{margin:16px 0;padding:14px 16px}
+.frow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.frow+.frow{margin-top:10px}
+.flab{font-size:11px;color:var(--mut);font-weight:700;letter-spacing:.03em;text-transform:uppercase;min-width:92px}
+.chip{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;color:#3a3c42;cursor:pointer}
+.chip.on{border-color:#23252B;background:#23252B;color:#fff}
+.chip.abc{min-width:38px;text-align:center}
+.sel{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;color:#3a3c42;min-width:170px}
+
+/* ---------- ВКЛАДКИ ---------- */
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--ln);margin:18px 0 16px}
+.tab{padding:9px 16px;font-size:13px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;position:relative;top:1px}
+.tab.on{color:var(--ink)}
+.tab.on:after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;border-radius:2px;background:var(--gradC)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sec{padding:18px 20px;margin-bottom:14px}
+
+/* ---------- БРЕНДЫ В ПОРТФЕЛЕ (единый сдержанный стиль) ---------- */
+.brs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.br{position:relative;border:1px solid var(--ln);border-radius:14px;padding:16px;background:#fff;overflow:hidden}
+.br:before{content:"";position:absolute;inset:0;background-image:var(--gradAccent);pointer-events:none}
+.br>*{position:relative}
+.br .bn{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#5a5c62;padding:3px 10px;border:1px solid var(--ln);border-radius:999px;background:#fff}
+.br .bacc{height:3px;border-radius:999px;background:var(--gradC);margin:12px 0 10px;width:46px}
+.br .bv{font-family:Unbounded;font-weight:800;font-size:24px}
+.br .bs{font-size:11.5px;color:var(--mut);margin-top:6px}
+
+/* ---------- ABC колонки ---------- */
+.abcg{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px}
+.abcc .hl{font-size:11.5px;color:var(--mut);margin-bottom:10px;font-weight:600}
+.abcrow{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:center;margin-bottom:11px}
+.badge{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:Unbounded;font-weight:700;font-size:11px;color:#fff}
+.badge.A{background:#1F9E74}.badge.B{background:#E0A200}.badge.C{background:#9A9CA1}
+.bar{height:9px;border-radius:999px;background:#EDEDE8;overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:999px;background:#3a3c42}
+.abcrow .txt{font-size:11.5px;color:var(--mut);margin-top:5px}
+
+/* ---------- Матрица клиент×бренд (сдержанная тепловая) ---------- */
+.mx{width:100%;border-collapse:separate;border-spacing:0;margin-top:14px;font-size:12.5px}
+.mx th{text-align:center;font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:8px 6px}
+.mx th:first-child,.mx td:first-child{text-align:left}
+.mx td{padding:0;text-align:center}
+.mxcell{margin:3px;border-radius:10px;padding:12px 6px;font-family:Unbounded;font-weight:800;font-size:15px;border:1px solid var(--ln)}
+.mxcell .c{font-size:11px;color:var(--mut);font-weight:600;font-family:Montserrat;margin-top:3px}
+.rowlab{font-weight:700;color:#3a3c42;padding-left:4px}
+.mxcnt{font-size:11.5px;color:var(--mut);text-align:center}
+
+/* ---------- География: покрытие ---------- */
+.cov{width:100%;border-collapse:separate;border-spacing:0 8px;margin-top:12px}
+.cov th{font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:0 10px 2px;text-align:left}
+.cov th.c{text-align:center}
+.covr td{background:#fff;border-top:1px solid var(--ln);border-bottom:1px solid var(--ln);padding:14px 12px;vertical-align:middle}
+.covr td:first-child{border-left:1px solid var(--ln);border-radius:12px 0 0 12px;font-weight:700;color:#3a3c42}
+.covr td:last-child{border-right:1px solid var(--ln);border-radius:0 12px 12px 0}
+.covr td.c{text-align:center}
+.covr td.c .pc{font-family:Unbounded;font-weight:800;font-size:20px}
+.covr td.c .cs{font-size:11px;color:var(--mut);margin-top:3px}
+.hint{font-size:11.5px;color:var(--mut);margin-top:10px}
+
+/* ---------- Панели вкладок ---------- */
+.panel{display:none}.panel.on{display:block}
+
+/* Портфель: динамика + статусы */
+.pfTop{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;align-items:stretch}
+.dyn svg{width:100%;height:200px;display:block}
+.lg{display:flex;gap:16px;font-size:11.5px;color:var(--mut);margin-top:8px}
+.lg i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.st{border:1px solid var(--ln);border-radius:14px;padding:14px 16px;background:#fff}
+.st .sv{font-family:Unbounded;font-weight:800;font-size:26px;line-height:1}
+.st .sl{font-size:12px;font-weight:700;color:#3a3c42;margin-top:8px}
+.st .ss{font-size:11px;color:var(--mut);margin-top:4px;line-height:1.3}
+.st.up .sv{color:var(--up)}.st.dn .sv{color:var(--dn)}
+
+/* Портфель: таблица клиентов */
+.srch{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+.srch input{flex:1;min-width:180px;border:1px solid var(--ln);background:#fff;border-radius:999px;padding:9px 16px;font-size:13px;font-family:inherit;color:var(--ink)}
+.ptbl{width:100%;border-collapse:collapse;font-size:13px}
+.ptbl th{text-align:left;font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--ln)}
+.ptbl th.r,.ptbl td.r{text-align:right}.ptbl th.c,.ptbl td.c{text-align:center}
+.ptbl td{padding:12px 10px;border-bottom:1px solid var(--ln)}
+.ptbl a{color:#1f6fd6;text-decoration:none;font-weight:600}
+.badge.s{width:20px;height:20px;border-radius:6px;font-size:10.5px;display:inline-flex;align-items:center;justify-content:center;color:#fff}
+.tag{display:inline-block;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px}
+.tag.ok{background:#E7F5EF;color:#1F9E74}.tag.dn{background:#FBE9EC;color:#C7001F}
+</style></head>
+<body>
+<div class="wrap">
+<div class="note">Макет на утверждение · <b>карточка менеджера «внутри»</b> — сдержанная стилистика вторичных страниц (градиент на белом, без ярких заливок). Цифры реальные — Дмитрий Жигалов.</div>
+
+<!-- Шапка -->
+<div class="mhead">
+  <div class="ava">ДЖ</div>
+  <div><h1>Дмитрий Жигалов</h1><div class="sub">Менеджер · филиал Владивосток</div></div>
+</div>
+
+<!-- KPI: сдержанный герой + ровная сетка метрик -->
+<div class="kpi">
+  <div class="hero">
+    <div class="l"><span class="dot">●</span>Продажи менеджера</div>
+    <div class="big">143,5<br>млн ₽</div>
+    <div><span class="d up">▲ +30%</span></div>
+    <div class="sub">к тому же периоду 2025 года</div>
+  </div>
+  <div class="metrics">
+    <div class="m"><div class="ml">Клиентов в портфеле</div><div class="mv">106</div><div class="md">когда-либо покупали у нас</div></div>
+    <div class="m"><div class="ml">Покупали за период</div><div class="mv">49</div><div class="md"><span class="pct">46%</span> портфеля</div></div>
+    <div class="m"><div class="ml">Без покупок за период</div><div class="mv">57</div><div class="md">покупали раньше</div></div>
+    <div class="m"><div class="ml">Заказов</div><div class="mv">533</div><div class="md">уникальные документы</div></div>
+    <div class="m"><div class="ml">Средний чек</div><div class="mv">269 168 ₽</div><div class="md">на один заказ</div></div>
+    <div class="m"><div class="ml">Доля в продажах компании</div><div class="mv">13%</div><div class="md">вклад менеджера</div></div>
+  </div>
+</div>
+
+<!-- Фильтры: единые контролы -->
+<div class="card filters">
+  <div class="frow">
+    <span class="flab">Бренд</span>
+    <span class="chip on">KRONbuild</span><span class="chip">ENKI</span><span class="chip">HeadRock</span>
+    <span class="flab" style="margin-left:14px">ABC клиента</span>
+    <span class="chip abc">A</span><span class="chip abc">B</span><span class="chip abc">C</span>
+  </div>
+  <div class="frow">
+    <span class="flab">Категория</span>
+    <span class="chip">Все</span><span class="chip">Крепёж</span><span class="chip">Инструмент</span><span class="chip">Электрика</span>
+    <span class="flab" style="margin-left:14px">Склад</span>
+    <span class="chip">Все склады</span>
+  </div>
+</div>
+
+<!-- Вкладки -->
+<div class="tabs">
+  <div class="tab on" data-tab="pf">Портфель</div>
+  <div class="tab" data-tab="geo">География</div>
+  <div class="tab" data-tab="abc">ABC и ассортимент</div>
+</div>
+
+<!-- === Вкладка Портфель === -->
+<div class="panel on" id="pf">
+  <div class="pfTop">
+    <div class="card sec dyn">
+      <div class="ct"><span class="dot">●</span>Динамика продаж клиентам менеджера, млн ₽</div>
+      <svg viewBox="0 0 560 200" preserveAspectRatio="none" aria-hidden="true">
+        <g stroke="#ECECE7" stroke-width="1">
+          <line x1="0" y1="40" x2="560" y2="40"/><line x1="0" y1="90" x2="560" y2="90"/><line x1="0" y1="140" x2="560" y2="140"/><line x1="0" y1="190" x2="560" y2="190"/>
+        </g>
+        <polyline fill="none" stroke="#C9CAC6" stroke-width="2.5" points="20,150 80,120 140,70 200,135 260,120 320,105 380,110 440,120 500,130"/>
+        <polyline fill="none" stroke="#FDCF08" stroke-width="3" points="20,165 80,140 140,100 200,115 260,95 320,80 380,70 440,55 500,120"/>
+      </svg>
+      <div class="lg"><span><i style="background:#FDCF08"></i>2026</span><span><i style="background:#C9CAC6"></i>2025 (по тем же датам)</span></div>
+    </div>
+    <div class="stat">
+      <div class="st up"><div class="sv">49</div><div class="sl">Покупают</div><div class="ss">все, кто купил в периоде</div></div>
+      <div class="st dn"><div class="sv">23</div><div class="sl">Снижение</div><div class="ss">падение к прошлому году ≥20%</div></div>
+      <div class="st"><div class="sv" style="color:#1f6fd6">4</div><div class="sl">Новые</div><div class="ss">первая покупка в периоде</div></div>
+      <div class="st"><div class="sv">57</div><div class="sl">Без покупок</div><div class="ss">покупали раньше</div></div>
+    </div>
+  </div>
+
+  <div class="card sec">
+    <div class="ct"><span class="dot">●</span>Портфель клиентов</div>
+    <div class="srch">
+      <input placeholder="Найти клиента…">
+      <span class="chip on">Все 106</span><span class="chip">Покупают 49</span><span class="chip">Без покупок 57</span><span class="chip">Снижение 23</span><span class="chip">Новые 4</span>
+    </div>
+    <table class="ptbl">
+      <thead><tr><th>Клиент</th><th>Город</th><th class="r">Продажи</th><th class="r">Δ к пр. году</th><th class="c">ABC</th><th>Последняя</th><th>Статус</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#">НОРДЛОГИСТИК ООО</a></td><td>Сибирский ФО (Запад)</td><td class="r">48,3 млн ₽</td><td class="r up">+64%</td><td class="c"><span class="badge s A">A</span></td><td>29 дн. назад</td><td><span class="tag ok">Покупает</span></td></tr>
+        <tr><td><a href="#">Прасолов С. И.</a></td><td>Барнаул</td><td class="r">20 млн ₽</td><td class="r up">+99%</td><td class="c"><span class="badge s A">A</span></td><td>сегодня</td><td><span class="tag ok">Покупает</span></td></tr>
+        <tr><td><a href="#">ДЕМИУРГ ООО</a></td><td>Петропавловск-Камчатский</td><td class="r">16,1 млн ₽</td><td class="r up">+343%</td><td class="c"><span class="badge s A">A</span></td><td>1 дн. назад</td><td><span class="tag ok">Покупает</span></td></tr>
+        <tr><td><a href="#">СЕЛТОС ООО</a></td><td>Новосибирск</td><td class="r">9,4 млн ₽</td><td class="r">—</td><td class="c"><span class="badge s A">A</span></td><td>3 дн. назад</td><td><span class="tag ok">Покупает</span></td></tr>
+        <tr><td><a href="#">ТИТАН-1 ООО</a></td><td>Южно-Сахалинск</td><td class="r">1,8 млн ₽</td><td class="r dn">−45%</td><td class="c"><span class="badge s B">B</span></td><td>18 дн. назад</td><td><span class="tag dn">Снижение</span></td></tr>
+      </tbody>
+    </table>
+    <div class="hint" style="text-align:center;margin-top:14px">Показать ещё 25 · всего 106</div>
+  </div>
+</div>
+
+<!-- === Вкладка География === -->
+<div class="panel" id="geo">
+<div class="card sec">
+  <div class="ct"><span class="dot">●</span>Покрытие территории по брендам</div>
+  <div class="hint" style="margin-top:4px">Города справочника в округах менеджера, где есть продажи: всего и по каждому бренду.</div>
+  <table class="cov">
+    <thead><tr><th>Территория</th><th class="c">Любой бренд</th><th class="c">KRONbuild</th><th class="c">ENKI</th><th class="c">HeadRock</th></tr></thead>
+    <tbody>
+      <tr class="covr">
+        <td>Сибирский ФО (Запад)</td>
+        <td class="c"><div class="pc">50%</div><div class="cs">6 из 12 городов · 86% нас.</div></td>
+        <td class="c"><div class="pc">50%</div><div class="cs">6 из 12 · 86% нас.</div></td>
+        <td class="c"><div class="pc">25%</div><div class="cs">3 из 12 · 58% нас.</div></td>
+        <td class="c"><div class="pc">42%</div><div class="cs">5 из 12 · 77% нас.</div></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="hint">Фильтры «ABC клиента» и «Категория» учитываются, «Бренд» здесь не применяется — таблица сравнивает бренды между собой.</div>
+</div>
+</div>
+
+<!-- === Вкладка ABC и ассортимент === -->
+<div class="panel" id="abc">
+<div class="card sec">
+  <div class="ct"><span class="dot">●</span>Бренды в портфеле</div>
+  <div class="brs">
+    <div class="br"><span class="bn">KRONbuild</span><div class="bacc"></div><div class="bv">78,8 млн ₽</div><div class="bs">44 из 49 клиентов берут · 55% продаж</div></div>
+    <div class="br"><span class="bn">ENKI</span><div class="bacc"></div><div class="bv">52,6 млн ₽</div><div class="bs">8 из 49 клиентов берут · 37% продаж</div></div>
+    <div class="br"><span class="bn">HeadRock</span><div class="bacc"></div><div class="bv">12,1 млн ₽</div><div class="bs">23 из 49 клиентов берут · 8% продаж</div></div>
+  </div>
+</div>
+
+<div class="card sec">
+  <div class="ct"><span class="dot">●</span>ABC</div>
+  <div class="abcg">
+    <div class="abcc">
+      <div class="hl">Клиенты портфеля (по выручке)</div>
+      <div class="abcrow"><div class="badge A">A</div><div><div class="bar"><span style="width:81%"></span></div><div class="txt">8 клиентов · 81% продаж</div></div></div>
+      <div class="abcrow"><div class="badge B">B</div><div><div class="bar"><span style="width:15%"></span></div><div class="txt">13 клиентов · 15% продаж</div></div></div>
+      <div class="abcrow"><div class="badge C">C</div><div><div class="bar"><span style="width:5%"></span></div><div class="txt">28 клиентов · 5% продаж</div></div></div>
+    </div>
+    <div class="abcc">
+      <div class="hl">Охват ассортимента компании</div>
+      <div class="abcrow"><div class="badge A">A</div><div><div class="bar"><span style="width:90%"></span></div><div class="txt">47 из 52 позиций</div></div></div>
+      <div class="abcrow"><div class="badge B">B</div><div><div class="bar"><span style="width:90%"></span></div><div class="txt">231 из 256 позиций</div></div></div>
+      <div class="abcrow"><div class="badge C">C</div><div><div class="bar"><span style="width:70%"></span></div><div class="txt">379 из 540 позиций</div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="card sec">
+  <div class="ct"><span class="dot">●</span>Какие клиенты что покупают: класс клиента × бренд</div>
+  <table class="mx">
+    <thead><tr><th></th><th>KRONbuild</th><th>ENKI</th><th>HeadRock</th><th>Клиентов</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="rowlab">A</td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.16)">54,1 млн<div class="c">8 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.15)">52,4 млн<div class="c">6 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.07)">9,4 млн<div class="c">5 кл.</div></div></td>
+        <td class="mxcnt">берут 1 / 2 / 3 бренда</td>
+      </tr>
+      <tr>
+        <td class="rowlab">B</td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.08)">18,2 млн<div class="c">13 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.05)">0,2 млн<div class="c">2 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.05)">2,1 млн<div class="c">9 кл.</div></div></td>
+        <td class="mxcnt">13 / 2 / 9</td>
+      </tr>
+      <tr>
+        <td class="rowlab">C</td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.04)">6,5 млн<div class="c">23 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.03)">0,0 млн<div class="c">0 кл.</div></div></td>
+        <td><div class="mxcell" style="background:rgba(255,122,0,.03)">0,6 млн<div class="c">9 кл.</div></div></td>
+        <td class="mxcnt">28 / 0 / 9</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /#abc -->
+
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on');});
+    document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
+    t.classList.add('on');
+    var el=document.getElementById(t.getAttribute('data-tab'));
+    if(el)el.classList.add('on');
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+});
+// чипы-переключатели для демонстрации
+document.querySelectorAll('.srch .chip').forEach(function(c){
+  c.addEventListener('click',function(){
+    c.parentNode.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');});
+    c.classList.add('on');
+  });
+});
+</script>
+</body></html>
