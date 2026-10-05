@@ -958,6 +958,11 @@ def _inject_into(src_path, out_path, KRS):
     print(f"  [OK] {out_path.name} пересобран ({len(out):,} байт)")
 
 def inject(KRS):
+    try:
+        import population_ref as _P
+        KRS['pop']={'city':_P.POP_CITY,'region':_P.POP_REGION,'note':'оценка по Росстату (~2023-2024), округлённо; справочник population_ref.py'}
+    except Exception as e:
+        print('  [!] население не подключено:',e)
     _inject_into(TEMPLATE_SRC, OUT, KRS)
     proto_src=ROOT/"Kairos_proto_template.html"
     if proto_src.exists():
