@@ -961,6 +961,8 @@ def _inject_into(src_path, out_path, KRS):
     if i<0: raise SystemExit(f'слот window.KRS_DATA не найден в шаблоне {src_path.name}')
     j=i+len(key); _,rel=json.JSONDecoder().raw_decode(src[j:]); end=j+rel
     out=src[:j]+json.dumps(KRS,ensure_ascii=False)+src[end:]
+    from selfcontain import make_self_contained
+    out=make_self_contained(out,ROOT)   # картинки, шрифты и three.js внутри файла: открывается из любой папки и без интернета
     out_path.write_text(out,encoding='utf-8')
     print(f"  [OK] {out_path.name} пересобран ({len(out):,} байт)")
 
