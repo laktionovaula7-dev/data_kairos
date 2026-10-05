@@ -538,7 +538,10 @@ def _plan_block(row, ci):
             'mskopt':round(c[1]+c[4]),            # Москва ОПТ = МСК ОПТ + МСК(HR)
             'mskseti':round(c[2]+c[5]),           # Москва СЕТИ = МСК СЕТИ (обе марки)
             'kronenki':round(c[0]+c[1]+c[2]),     # KRONbuild+ENKI
-            'headrock':round(c[3]+c[4]+c[5])}     # HEADROCK
+            'headrock':round(c[3]+c[4]+c[5]),     # HEADROCK
+            'cells':{'ОПТ Москва':{'kronenki':round(c[1]),'headrock':round(c[4])},
+                     'ОПТ Владивосток':{'kronenki':round(c[0]),'headrock':round(c[3])},
+                     'Сети':{'kronenki':round(c[2]),'headrock':round(c[5])}}}
 def load_plan():
     import openpyxl
     if not F_PLAN.exists(): print("  [!] нет файла плана"); return {}
@@ -548,7 +551,7 @@ def load_plan():
     sheets=(['Лист1'] if 'Лист1' in wb.sheetnames else [])+[s for s in wb.sheetnames if s.strip().isdigit()]
     def blank(): return {'months':{},'filials':{'Москва':{},'Владивосток':{}},
                          'brands':{'headrock':{},'kronenki':{}},
-                         'buckets':{'ОПТ Москва':{},'ОПТ Владивосток':{},'Сети':{}},'annual':0}
+                         'buckets':{'ОПТ Москва':{},'ОПТ Владивосток':{},'Сети':{}},'cells':{},'annual':0}
     for sn in sheets:
         for v in wb[sn].iter_rows(values_only=True):
             for ci,cell in enumerate(v):
@@ -567,6 +570,8 @@ def load_plan():
                     if mi in p['months']: continue
                     p['months'][mi]=b['total']; p['filials']['Москва'][mi]=b['msk']; p['filials']['Владивосток'][mi]=b['vl']
                     p['brands']['headrock'][mi]=b['headrock']; p['brands']['kronenki'][mi]=b['kronenki']
+                    for _bk,_bg in b['cells'].items():
+                        for _g,_v in _bg.items(): p['cells'].setdefault(_bk,{}).setdefault(_g,{})[mi]=_v
                     p['buckets']['ОПТ Москва'][mi]=b['mskopt']; p['buckets']['ОПТ Владивосток'][mi]=b['vl']; p['buckets']['Сети'][mi]=b['mskseti']
     for yr,p in plan.items():
         p['annual']=sum(p['months'].values())
