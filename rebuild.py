@@ -19,12 +19,21 @@ try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
 ROOT   = Path(__file__).resolve().parent
-F_SALES= ROOT/"Продажи по бизнес регионам 24г-26г.xlsx"
-F_STOCK= ROOT/"Остатки и доступность по сериям.xlsx"
+DATA   = ROOT/"Продажи и остатки"                      # свежие выгрузки кладём сюда (fallback — корень)
+def _pick(*cands):
+    """Первый существующий путь из кандидатов (свежая папка приоритетнее корня)."""
+    for p in cands:
+        if p and Path(p).exists(): return Path(p)
+    return Path(cands[0])
+# Продажи: полная история (2024-2026) — из неё берём только 2024-2025; свежий файл — 2026 до актуальной даты
+F_SALES= _pick(DATA/"Продажи по бизнес регионам 24г-26г.xlsx", ROOT/"Продажи по бизнес регионам 24г-26г.xlsx")
+F_SALES_CUR=_pick(DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # свежий 2026 (01.01.26-05.10.26)
+F_STOCK= _pick(DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
+               DATA/"Остатки и доступность по сериям.xlsx", ROOT/"Остатки и доступность по сериям.xlsx")
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
-F_PLAN = ROOT/"План_25_26.xlsx"
+F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 
 def _find_client_inn():
     if CRM_DIR.exists():
@@ -32,7 +41,8 @@ def _find_client_inn():
     return None
 TEMPLATE_SRC = ROOT/"Kairos_dashboard_final.html"      # источник вёрстки (из него берём слот данных)
 OUT    = ROOT/"Kairos_dashboard_rebuilt.html"          # результат (отдельный файл до проверки)
-CACHE  = ROOT/"work"/"_sales_rows2.pkl"                # кэш сырых строк продаж (v2: с артикулом)
+CACHE  = ROOT/"work"/"_sales_rows2.pkl"                # кэш сырых строк продаж (полная история)
+CACHE_CUR=ROOT/"work"/"_sales_rows_cur.pkl"            # кэш сырых строк продаж (свежий 2026)
 
 CUR_YEAR, PREV_YEAR = 2026, 2025
 TURN_WINDOW_DAYS = 90          # окно для оборачиваемости (DOS)
@@ -154,19 +164,21 @@ def group_cat(cat, brand, name=None):
     return cat
 
 # ---------------- ПРОДАЖИ: быстрый загрузчик (значения read_only + уровни из XML) --------
-def load_sales_rows():
-    if CACHE.exists() and CACHE.stat().st_mtime>=F_SALES.stat().st_mtime:
-        print("  продажи: из кэша"); return pickle.loads(CACHE.read_bytes())
+def load_sales_rows(path=None, cache=None):
+    path=Path(path) if path else F_SALES
+    cache=Path(cache) if cache else CACHE
+    if cache.exists() and cache.stat().st_mtime>=path.stat().st_mtime:
+        print(f"  продажи ({path.name}): из кэша"); return pickle.loads(cache.read_bytes())
     import openpyxl
     t0=time.time()
     ns='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
     levels={}
-    with zipfile.ZipFile(F_SALES).open('xl/worksheets/sheet1.xml') as fp:
+    with zipfile.ZipFile(path).open('xl/worksheets/sheet1.xml') as fp:
         for ev,el in ET.iterparse(fp,events=('end',)):
             if el.tag==ns+'row':
                 r=int(el.get('r')); ol=el.get('outlineLevel'); levels[r]=int(ol) if ol else 0
                 el.clear()
-    wb=openpyxl.load_workbook(F_SALES,read_only=True,data_only=True); ws=wb['Лист_1']
+    wb=openpyxl.load_workbook(path,read_only=True,data_only=True); ws=wb['Лист_1']
     rows=[]; r=0
     for v in ws.iter_rows(min_row=1,values_only=True):
         r+=1
@@ -180,14 +192,39 @@ def load_sales_rows():
         if c1 is None and nt is None and q is None: continue
         rows.append([levels.get(r,0),(str(c1).strip() if c1 is not None else None),q,gr,rt,nt,(str(art).strip() if art else None)])
     wb.close()
-    CACHE.parent.mkdir(exist_ok=True)
-    CACHE.write_bytes(pickle.dumps(rows))
-    print(f"  продажи: {len(rows)} строк за {round(time.time()-t0,1)}с")
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_bytes(pickle.dumps(rows))
+    print(f"  продажи ({path.name}): {len(rows)} строк за {round(time.time()-t0,1)}с")
     return rows
 
 DOC=('заказ клиента','реализация','корректировка','возврат','поступление','перемещение','списание','оприходование','инвентаризация','отчет комиссионера')
 _isdoc=lambda s:any(s.lower().startswith(k) for k in DOC)
 _rx=re.compile(r'от (\d{2})\.(\d{2})\.(\d{4})')
+
+def filter_year(rows, keep):
+    """Оставляет только документы верхнего уровня, чья дата (год) входит в keep.
+    Структурные заголовки (регион/субъект/город/компания) сохраняются; поддерево
+    документа другого года (сам документ + вложенные строки) отбрасывается целиком.
+    Позволяет взять 2024-2025 из полной истории и 2026 — из свежего файла без задвоения."""
+    out=[]; skip=None; names={}
+    for row in rows:
+        lvl=row[0]; name=row[1]
+        if skip is not None:
+            if lvl>skip: continue       # внутри отбрасываемого поддерева
+            skip=None                    # вышли на уровень документа-сиблинга/выше
+        if name is None:
+            names[lvl]=None
+            for L in [x for x in names if x>lvl]: del names[L]
+            out.append(row); continue
+        parent=names.get(lvl-1)
+        names[lvl]=name
+        for L in [x for x in names if x>lvl]: del names[L]
+        if _isdoc(name) and not _isdoc(parent or ''):   # только документ ВЕРХНЕГО уровня
+            m=_rx.search(name)
+            if m and int(m.group(3)) not in keep:
+                skip=lvl; continue                        # отбрасываем документ и всё глубже
+        out.append(row)
+    return out
 
 # округа Владивостока (остальные округа России -> Москва); СНГ -> ОПТ Москва; СЕТИ -> канал сети
 VLAD_OKRUGA={'Дальневосточный ФО','Сибирский ФО (Восток)','Сибирский ФО (Запад)','Уральский ФО'}
@@ -989,7 +1026,15 @@ def inject(KRS):
 if __name__=='__main__':
     print("Читаю источники…")
     price=load_price()
-    rows=load_sales_rows()
+    # 2024-2025 — из полной истории; 2026 — из свежего файла (до актуальной даты), чтобы не задвоить 2026
+    rows=filter_year(load_sales_rows(F_SALES, CACHE), {2024,2025})
+    if F_SALES_CUR.exists():
+        rows+=filter_year(load_sales_rows(F_SALES_CUR, CACHE_CUR), {2026})
+        print(f"  слияние: 2024-2025 из истории + 2026 из свежего файла ({F_SALES_CUR.name})")
+    else:
+        rows+=filter_year(load_sales_rows(F_SALES, CACHE), {2026})
+        print("  [!] свежего файла 2026 нет — 2026 взято из полной истории")
+    print(f"  строк после слияния: {len(rows)}")
     S=parse_sales(rows,price)
     stock=load_stock()
     plan=load_plan()
