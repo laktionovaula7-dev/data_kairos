@@ -80,4 +80,14 @@ def make_self_contained(html: str, root: Path) -> str:
     if three.exists():
         js = three.read_text(encoding='utf-8').replace('</script', '<\\/script')
         html = html.replace('<script src="assets/three.min.js"></script>', '<script>' + js + '</script>', 1)
+
+    # 5. загрузка выгрузок 1С прямо в браузере (kairos_ingest*.js) — тоже внутрь файла
+    for fn in ('kairos_ingest.js', 'kairos_ingest_ui.js'):
+        f = root / fn
+        if f.exists():
+            js = f.read_text(encoding='utf-8').replace('</script', '<\\/script')
+            tag = f'<script src="{fn}"></script>'
+            i = html.find(tag)
+            if i >= 0:
+                html = html[:i] + '<script>' + js + '</script>' + html[i + len(tag):]
     return html

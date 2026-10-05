@@ -388,6 +388,7 @@ def load_stock():
     return stock
 
 # ---------------- СРОКИ ГОДНОСТИ (по сериям) ----------------
+RAW_EXPIRY={}
 def load_expiry(refiso):
     import openpyxl
     from datetime import datetime
@@ -416,6 +417,8 @@ def load_expiry(refiso):
     wb.close()
     out={}
     horizon=90
+    global RAW_EXPIRY
+    RAW_EXPIRY={a:[[d.strftime('%Y-%m-%d'),q] for d,q in sorted((d,q) for d,q in bs if q>0)] for a,bs in batches.items()}
     for a,bs in batches.items():
         withq=sorted([(d,q) for d,q in bs if q>0])
         exp=round(sum(q for d,q in withq if d<ref))
@@ -966,6 +969,12 @@ def _inject_into(src_path, out_path, KRS):
     out_path.write_text(out,encoding='utf-8')
     print(f"  [OK] {out_path.name} пересобран ({len(out):,} байт)")
 
+def export_refs(KRS, price, stock):
+    """Справочники, нужные браузерному пересчёту (kairos_ingest.js): прайс, цены, остатки, партии сроков годности."""
+    KRS['refs']={'price':[[k,v[0],v[1],v[2],v[3]] for k,v in price.items() if k!='__art_price__'],
+                 'artPrice':price.get('__art_price__',{}),'stock':stock,'expiry':RAW_EXPIRY,
+                 'stockWh':STOCK_WAREHOUSE,'turnWindow':TURN_WINDOW_DAYS}
+
 def inject(KRS):
     try:
         import population_ref as _P
@@ -995,4 +1004,5 @@ if __name__=='__main__':
     print(f"  overview {CUR_YEAR}: продажи {ov['sales']:,} ₽ | план YTD {ov['planYTD']:,} | "
           f"выполн {ov['planDone']}% | АППГ {ov['growth']}% (к тем же мес. {CUR_YEAR-1})")
     print(f"  клиентов {len(KRS['clients'])} | каталог {len(KRS['catalog'])} SKU | оборач. {len(KRS['turnover'])} арт.")
+    export_refs(KRS,price,stock)
     inject(KRS)
