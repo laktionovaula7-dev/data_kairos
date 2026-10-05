@@ -746,7 +746,7 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     var id=null; for(var i=0;i<D.clients.length;i++){if(D.clients[i].name===name){id=D.clients[i].id;break;}}
     if(id){state.page='clients';state.client=id;state.clientTab='overview'; if(window.render)render();}
   };
-  function managerPage(){
+  function managerPageOld(){
     var rg=periodRange(),lo=rg[0],hi=rg[1],yr=String(Math.floor(lo/10000));
     var CM=D.clientManager||{}; var sel=state.mgrSel;
     var mSales={},mCl={},mOrd={},byMonth={},byReg={},byClient={},byBrand={},detFact=0,detOrd={};
@@ -848,7 +848,266 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       +'<div class="table-wrap" style="max-height:520px"><table class="data-table"><thead><tr><th>Товар</th><th>Группа</th><th>ABC</th><th class="num">Выручка компании</th><th class="num">Всего доступно</th></tr></thead><tbody>'+(rows||'<tr><td colspan=5 class="empty">клиент уже берёт топовые позиции</td></tr>')+'</tbody></table></div></section>';
   }
 
-  function clientsPage(){if(state.client)return clientDetailPage();return `${pageHead('Клиенты','Клиенты, которые присутствуют в ABC-выгрузке, с фактическими продажами из отчета бизнес-регионов.')}${notice()}<div class="card pad"><div class="card-title">Клиенты с доступным ABC-анализом ${dataTag('source')}</div>${clientTable(D.clients,true)}</div><div class="notice" style="margin-top:12px">${ico('alert')} Для клиентов вне списка ABC можно показать продажи, но глубокая матрица «покупает / не покупает» потребует расширенной ABC-выгрузки на всю клиентскую базу.</div>`}
+  /* ===================== МЕНЕДЖЕРЫ И КЛИЕНТЫ v2 ===================== */
+  var MCX_PHOTO={'Дмитрий Жигалов':'zhigalov','Александр Федотов':'fedotov','Евгений Швайгерт':'shvaygert','Семён Комиссаров':'komissarov','Максим Чашников':'chashnikov','Сергей Сидоров':'sidorov','Василий Димитрюк':'dimitryuk'};
+  var MCX_BR=[['KRONbuild','#FDCF08','#2A2A2A'],['ENKI','#D3DDD7','#207E66'],['HeadRock','#ECE8E1','#C7001F']];
+  var MCX_NONE={'Не назначен':1,'Не распределён':1};
+  function mcxDayDiff(a,b){function d(x){return Date.UTC(Math.floor(x/10000),Math.floor(x/100)%100-1,x%100);}return Math.round((d(b)-d(a))/864e5);}
+  function mcxQ(s){return String(s==null?'':s).replace(/\x27/g,'').replace(/\\/g,'');}
+  function mcxPct(c,p){return p>0?Math.round((c-p)/p*100):null;}
+  function mcxDelta(c,p,txt){var d=mcxPct(c,p);if(d==null)return '<span class="mx-d flat">нет АППГ</span>';return '<span class="mx-d '+(d>=0?'up':'dn')+'">'+(d>=0?'▲ +':'▼ ')+d+'%'+(txt?(' '+txt):'')+'</span>';}
+  function mcxAbcOf(items,getV){ /* items sorted desc -> class by cumulative share before item */
+    var tot=0;items.forEach(function(x){tot+=getV(x);});tot=tot||1;var cum=0;
+    items.forEach(function(x){x.abc=cum<tot*0.8?'A':(cum<tot*0.95?'B':'C');cum+=getV(x);});}
+
+  function mcxAgg(){
+    var rg=periodRange(),lo=rg[0],hi=rg[1],key=lo+'|'+hi;
+    if(window.__mcx&&window.__mcx.key===key)return window.__mcx;
+    var yr=Math.floor(lo/10000),fM=Math.floor((lo%10000)/100)||1,lM=Math.floor((hi%10000)/100)||12,lastData=fM;
+    for(var m=12;m>=fM;m--){var kk=''+yr+(m<10?'0'+m:m);if(D.ym&&D.ym[kk]){lastData=m;break;}}
+    var effM=Math.min(lM,lastData),pl=(yr-1)*10000+fM*100+1,ph=(yr-1)*10000+effM*100+31;
+    var refN=D.refDate?parseInt(D.refDate.replace(/-/g,'')):hi;
+    var CM=D.clientManager||{},CR=D.clientRegion||{},CT=D.clientCity||{},CC=D.clientChannel||{},CF=D.clientFilial||{};
+    var cl={},lastAll={},companySku={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i],d=t[0],ci=t[1];
+      if(d<=refN&&(!lastAll[ci]||d>lastAll[ci]))lastAll[ci]=d;
+      var c=cl[ci];
+      if(d>=lo&&d<=hi){
+        if(!c)c=cl[ci]={i:ci,s:0,q:0,p:0,od:{},sk:{},br:{},cat:{}};
+        c.s+=t[4];c.q+=t[3];c.od[d]=1;
+        var sk=D.txSkus[t[2]]||['','',0,'HeadRock'];
+        c.sk[t[2]]=(c.sk[t[2]]||0)+t[4];
+        var b=sk[3]||'HeadRock';c.br[b]=(c.br[b]||0)+t[4];
+        var ct=D.txCats[sk[2]];if(ct&&ct!=='Без категории')c.cat[ct]=(c.cat[ct]||0)+t[4];
+        companySku[t[2]]=(companySku[t[2]]||0)+t[4];
+      }else if(d>=pl&&d<=ph){if(!c)c=cl[ci]={i:ci,s:0,q:0,p:0,od:{},sk:{},br:{},cat:{}};c.p+=t[4];}
+    }
+    var rows=[],lost=[],total=0,prevTotal=0;
+    Object.keys(cl).forEach(function(k){var c=cl[k],nm=D.txClients[c.i];
+      c.name=nm;c.mgr=CM[nm]||'';c.reg=CR[nm]||'';c.city=CT[nm]||'';c.chan=CC[nm]||'';
+      c.fil=(c.chan==='СЕТИ')?'Сети':(CF[nm]==='Владивосток'?'Владивосток':'Москва');
+      c.orders=Object.keys(c.od).length;c.last=lastAll[c.i]||null;c.days=c.last?mcxDayDiff(c.last,refN):null;
+      prevTotal+=Math.max(0,c.p);
+      if(c.s>0){total+=c.s;c.isNew=!(c.p>0);c.st=(c.days==null)?'risk':(c.days<=45?'ok':(c.days<=90?'warn':'risk'));rows.push(c);}
+      else if(c.p>0){lost.push(c);}
+    });
+    rows.sort(function(a,b){return b.s-a.s;});mcxAbcOf(rows,function(x){return x.s;});
+    lost.sort(function(a,b){return b.p-a.p;});
+    var skCls={},skArr=Object.keys(companySku).filter(function(k){return companySku[k]>0;}).map(function(k){return {k:k,v:companySku[k]};}).sort(function(a,b){return b.v-a.v;});
+    mcxAbcOf(skArr,function(x){return x.v;});skArr.forEach(function(x){skCls[x.k]=x.abc;});
+    var idByName={};(D.clients||[]).forEach(function(c){idByName[c.name]=c.id;});
+    return (window.__mcx={key:key,lo:lo,hi:hi,yr:yr,fM:fM,effM:effM,refN:refN,rows:rows,lost:lost,total:total,prevTotal:prevTotal,companySku:companySku,skCls:skCls,skArr:skArr,idByName:idByName});
+  }
+  function mcxMgrs(A){
+    var g={};
+    A.rows.forEach(function(c){if(!c.mgr)return;var m=g[c.mgr]||(g[c.mgr]={name:c.mgr,s:0,p:0,n:0,orders:0,fv:0,fm:0,aN:0,aS:0,regs:{},rows:[]});
+      m.s+=c.s;m.p+=Math.max(0,c.p);m.n++;m.orders+=c.orders;m.rows.push(c);if(c.abc==='A'){m.aN++;m.aS+=c.s;}
+      if(c.fil==='Владивосток')m.fv+=c.s;else if(c.fil==='Москва')m.fm+=c.s;
+      if(c.reg&&c.reg!=='Не распределён'&&c.reg!=='СЕТИ')m.regs[c.reg]=(m.regs[c.reg]||0)+c.s;});
+    // АППГ менеджера — по клиентам, потерянным и действующим
+    A.lost.forEach(function(c){if(c.mgr&&g[c.mgr])g[c.mgr].p+=c.p;});
+    return Object.keys(g).map(function(k){var m=g[k];m.avg=m.orders?Math.round(m.s/m.orders):0;m.fil=(m.fv>m.fm)?'Владивосток':'Москва';
+      m.topOk=Object.keys(m.regs).sort(function(a,b){return m.regs[b]-m.regs[a];})[0]||null;return m;}).sort(function(a,b){return b.s-a.s;});
+  }
+  function mcxCss(){return '<style>'
+    +'.mx{--g:#2A2A2A;--r:#C7001F;--y:#FDCF08}.mx *{box-sizing:border-box}'
+    +'.mx .mx-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 16px}.mx .mx-title{font-family:Unbounded,sans-serif;font-weight:800;font-size:24px;letter-spacing:-.02em}.mx .mx-sub{font-size:13px;color:#8b8d90}'
+    +'.mx .mx-back{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 16px;font-weight:600;font-size:12.5px;cursor:pointer;color:#2A2A2A}.mx .mx-sp{margin-left:auto}'
+    +'.mx .mx-r1{display:grid;grid-template-columns:minmax(320px,1fr) 1.45fr;gap:16px;margin-bottom:16px;align-items:start}.mx .mx-pscroll{max-height:560px;overflow:auto;padding-right:8px}.mx .mx-r2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:stretch}'
+    +'.mx .mx-dark{background:radial-gradient(135% 115% at 100% -5%,#ff8400 0%,#ff2d00 12%,#c8021f 25%,rgba(34,34,37,0) 52%),#232326;color:#fff;border-radius:22px;padding:26px 28px;display:flex;flex-direction:column;position:relative;overflow:hidden}'
+    +'.mx .mx-dark2{background:#232326;background:radial-gradient(120% 120% at 100% 110%,rgba(200,2,31,.45) 0%,rgba(35,35,38,0) 55%),#232326;color:#fff;border-radius:22px;padding:22px 24px}'
+    +'.mx .mx-cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.6)}.mx .mx-card .mx-cap{color:#8b8d90}'
+    +'.mx .mx-big{font-family:Unbounded,sans-serif;font-weight:800;font-size:52px;line-height:1;margin:14px 0 8px;letter-spacing:-.02em}'
+    +'.mx .mx-rule{height:1px;background:rgba(255,255,255,.14);margin:20px 0 4px}.mx .mx-dgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px;margin-top:16px}'
+    +'.mx .mx-dv{font-family:Unbounded,sans-serif;font-weight:800;font-size:21px;line-height:1}.mx .mx-du{font-family:Montserrat,sans-serif;font-weight:500;font-size:12px;color:rgba(255,255,255,.72);margin-left:6px}.mx .mx-dl{font-size:11px;margin-top:5px;font-weight:600;color:rgba(255,255,255,.6)}'
+    +'.mx .mx-d{font-size:12px;font-weight:700}.mx .mx-d.up{color:#207E66}.mx .mx-d.dn{color:#C7001F}.mx .mx-d.flat{color:#8b8d90;font-weight:500}.mx .mx-dark .mx-d.up{color:#7ad19f}.mx .mx-dark .mx-d.dn{color:#ff7a7a}.mx .mx-dark .mx-d.flat{color:rgba(255,255,255,.55)}'
+    +'.mx .mx-cta{margin-top:auto;align-self:flex-start;border:0;border-radius:999px;background:#FDCF08;color:#2A2A2A;font-weight:700;font-size:13px;padding:12px 22px;cursor:pointer;transition:transform .2s}.mx .mx-cta:hover{transform:translateY(-2px)}'
+    +'.mx .mx-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px 22px;transition:transform .25s ease-out,box-shadow .25s ease-out}.mx .mx-card:hover{box-shadow:0 14px 34px rgba(0,0,0,.07)}'
+    +'.mx .mx-ct{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-weight:700;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#8b8d90;margin-bottom:14px}.mx .mx-ct em{font-style:normal;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px}'
+    +'.mx .mx-note{font-size:12px;color:#4a4d52;margin-top:8px;line-height:1.45}.mx .mx-note b.r{color:#C7001F}'
+    +'.mx .mp{height:8px;background:#EEEBE4;border-radius:5px;overflow:hidden}.mx .mp>span{display:block;height:100%;background:linear-gradient(90deg,#FDCF08,#C7001F);border-radius:5px}'
+    /* карточки менеджеров */
+    +'.mx .mx-grp{display:grid;grid-template-columns:130px 1fr;gap:16px;margin-bottom:14px;align-items:start}.mx .mx-gside{font-family:Unbounded,sans-serif;font-weight:800;font-size:15px;padding-top:14px}.mx .mx-gside small{display:block;font-family:Montserrat,sans-serif;font-weight:500;font-size:12px;color:#8b8d90;margin-top:4px}'
+    +'.mx .mx-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}'
+    +'.mx .mx-mc{background:#FBFAF7;border:1px solid var(--line);border-radius:20px;padding:16px;cursor:pointer;transition:transform .22s ease-out,box-shadow .22s ease-out;text-align:center}.mx .mx-mc:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.09)}'
+    +'.mx .mx-ph{width:112px;height:112px;margin:0 auto 10px;border-radius:22px;overflow:hidden;background:linear-gradient(135deg,#e9e7e2,#d6d3cc);display:flex;align-items:center;justify-content:center;font-family:Unbounded,sans-serif;font-weight:800;font-size:28px;color:#9a9c9f}.mx .mx-ph img{width:100%;height:100%;object-fit:cover;object-position:top}'
+    +'.mx .mx-mn{font-weight:700;font-size:14px}.mx .mx-mf{font-size:11.5px;color:#8b8d90;margin-top:2px;min-height:15px}.mx .mx-mv{font-family:Unbounded,sans-serif;font-weight:800;font-size:19px;margin-top:10px;color:#2A2A2A}.mx .mx-mc .mx-d{display:block;margin:3px 0 8px}'
+    +'.mx .mx-ms{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:10px;font-size:11px;color:#8b8d90}.mx .mx-ms b{display:block;font-size:13px;color:#2A2A2A}.mx .mx-ma{margin-top:10px;font-size:11.5px;color:#4a4d52}'
+    /* портфель */
+    +'.mx details.mx-rg{border-bottom:1px solid var(--line)}.mx details.mx-rg:last-child{border-bottom:0}.mx details>summary{list-style:none;cursor:pointer}.mx details>summary::-webkit-details-marker{display:none}'
+    +'.mx .mx-rgs{display:grid;grid-template-columns:18px minmax(0,1fr) 120px 90px 64px;gap:10px;align-items:center;padding:11px 0;font-size:13px}.mx .mx-rgs .ar{color:#9a9c9f;transition:transform .15s}.mx details[open]>summary .ar{transform:rotate(90deg)}.mx .mx-rgs .n{font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.mx .mx-rgs .v{text-align:right;font-weight:700}.mx .mx-rgs .s{text-align:right;color:#8b8d90;font-size:12px}'
+    +'.mx .mx-ci{margin-left:28px;border-left:2px solid #EEEBE4;padding-left:12px}.mx .mx-ci .mx-rgs{padding:8px 0;font-size:12.5px}.mx .mx-ci .mx-rgs .n{font-weight:600}'
+    +'.mx .mx-co{margin-left:28px;border-left:2px solid #EEEBE4;padding-left:12px}'
+    +'.mx .mx-lk{font-size:11.5px;color:#C7001F;font-weight:700;cursor:pointer;margin-left:8px}'
+    /* бренды/категории/abc */
+    +'.mx .mx-b{display:grid;grid-template-columns:104px 1fr auto;gap:14px;align-items:center;margin-bottom:12px}.mx .mx-btile{border-radius:12px;padding:10px 0;text-align:center;font-family:Unbounded,sans-serif;font-weight:800;font-size:11.5px}.mx .mx-dark2 .mp{background:rgba(255,255,255,.14)}.mx .mx-b small{display:block;margin-top:5px;font-size:11.5px;color:rgba(255,255,255,.65)}.mx .mx-bv{font-family:Unbounded,sans-serif;font-weight:800;font-size:15px;text-align:right}.mx .mx-bv small{font-family:Montserrat,sans-serif;font-weight:600;font-size:11px}'
+    +'.mx .mx-cat{display:grid;grid-template-columns:150px 1fr 90px 40px;gap:10px;align-items:center;font-size:12.5px;padding:5px 0}.mx .mx-cat .n{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}.mx .mx-cat .v{text-align:right;font-weight:700}.mx .mx-cat .s{text-align:right;color:#8b8d90}'
+    +'.mx .mx-abc{display:grid;grid-template-columns:30px 1fr 42px;gap:6px 12px;align-items:center}.mx .mx-abc .s{grid-column:2/4;font-size:11.5px;color:#8b8d90;margin:-2px 0 8px}'
+    +'.mx .mx-mon{display:flex;align-items:flex-end;gap:6px;height:150px;margin-top:6px}.mx .mx-mon>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:#9a9c9f}.mx .mx-mon .bars{display:flex;align-items:flex-end;gap:2px;height:118px;width:100%;justify-content:center}.mx .mx-mon .bars i{display:block;width:42%;border-radius:4px 4px 2px 2px;background:#2A2A2A;min-height:2px}.mx .mx-mon .bars i.pv{background:#D9D7CE}'
+    /* рейтинг компаний */
+    +'.mx .mx-rt{display:grid;grid-template-columns:34px minmax(0,1.6fr) 74px 36px minmax(120px,1fr) 62px 128px;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12.5px;transition:background .15s}.mx .mx-rt:hover{background:#FBFAF7}.mx .mx-rt:last-child{border-bottom:0}'
+    +'.mx .mx-rt.nolink{cursor:default}.mx .mx-rt.nolink:hover{background:none}.mx .mx-rth{cursor:default;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8b8d90;font-weight:700;border-bottom:1px solid var(--line)}.mx .mx-rth:hover{background:none}'
+    +'.mx .rk{font-family:Unbounded,sans-serif;font-weight:800;color:#9a9c9f;font-size:13px}.mx .mx-rt:nth-child(-n+4) .rk{color:#C7001F}.mx .nm{font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.mx .mt{font-size:11.5px;color:#8b8d90;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:2px}'
+    +'.mx .bd{display:flex;gap:3px}.mx .bd i{width:11px;height:11px;border-radius:3px;display:block}.mx .sv{display:flex;align-items:center;gap:8px}.mx .sv .mp{flex:1;min-width:40px;height:7px}.mx .sv b{min-width:74px;text-align:right}'
+    +'.mx .chip{display:inline-block;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap}.mx .chip.ok{background:#E4F5EC;color:#207E66}.mx .chip.warn{background:#FFF1CC;color:#8a6500}.mx .chip.risk{background:#FBE7EA;color:#C7001F}.mx .chip.lost{background:#EEEBE4;color:#5c5e61}.mx .chip.new{background:#232326;color:#FDCF08;margin-left:6px;padding:2px 8px;font-size:10px}'
+    +'.mx .mx-pod{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}.mx .mx-pc{border-radius:20px;padding:18px 20px;cursor:pointer;background:#fff;border:1px solid var(--line);position:relative;overflow:hidden;transition:transform .22s,box-shadow .22s}.mx .mx-pc:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,.09)}.mx .mx-pc.p1{background:radial-gradient(135% 115% at 100% -5%,#ff8400 0%,#ff2d00 12%,#c8021f 25%,rgba(34,34,37,0) 52%),#232326;color:#fff;border:0}'
+    +'.mx .mx-pc .pr{font-family:Unbounded,sans-serif;font-weight:800;font-size:34px;line-height:1;color:#C7001F}.mx .mx-pc.p1 .pr{color:#FDCF08}.mx .mx-pc .pn{font-weight:700;font-size:14px;margin-top:10px;line-height:1.25}.mx .mx-pc .pm{font-size:11.5px;color:#8b8d90;margin-top:3px}.mx .mx-pc.p1 .pm{color:rgba(255,255,255,.65)}.mx .mx-pc .pv{font-family:Unbounded,sans-serif;font-weight:800;font-size:20px;margin-top:12px}'
+    +'.mx .mx-kp{display:grid;grid-template-columns:1.1fr 1.4fr 1.6fr;gap:16px;margin-bottom:16px}.mx .mx-kv{font-family:Unbounded,sans-serif;font-weight:800;font-size:30px;margin-top:6px;line-height:1.05}'
+    +'.mx .mx-stack{display:flex;height:16px;border-radius:999px;overflow:hidden;margin:12px 0 8px;background:#EEEBE4}.mx .mx-stack span{display:block;height:100%}'
+    +'.mx .mx-lg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px}.mx .mx-lg b{font-family:Unbounded,sans-serif;font-size:15px;display:block}'
+    +'.mx .mx-sts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.mx .mx-sts button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;color:#2A2A2A}.mx .mx-sts button b{font-family:Unbounded,sans-serif;margin-left:6px}.mx .mx-sts button.on{background:#2A2A2A;color:#fff;border-color:#2A2A2A}'
+    +'.mx .mx-fl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.mx .mx-fl input,.mx .mx-fl select{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font:inherit;font-size:13px;color:#2A2A2A;min-width:140px}.mx .mx-fl input{min-width:240px}.mx .mx-fl .btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 16px;font-weight:600;font-size:12.5px;cursor:pointer}'
+    +'.mx .mx-more{display:block;margin:14px auto 0;border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 24px;font-weight:600;font-size:13px;cursor:pointer}.mx .mx-empty{padding:24px;text-align:center;color:#8b8d90}'
+    +'@media(max-width:1000px){.mx .mx-r1,.mx .mx-r2,.mx .mx-kp,.mx .mx-pod{grid-template-columns:1fr}.mx .mx-grp{grid-template-columns:1fr}.mx .mx-rt{grid-template-columns:28px minmax(0,1fr) 36px 110px}.mx .mx-rt .bd,.mx .mx-rt .dl,.mx .mx-rt .stc{display:none}.mx .mx-big{font-size:42px}}'
+    +'</style>';}
+
+  /* ---------- общий компонент: рейтинг компаний ---------- */
+  function mcxRatingHead(){return '<div class="mx-rt mx-rth"><span>#</span><span>Компания</span><span>Бренды</span><span>ABC</span><span>Продажи</span><span class="dl">Δ АППГ</span><span class="stc">Последний заказ</span></div>';}
+  function mcxStatChip(c){if(c.days==null)return '<span class="chip lost">нет заказов</span>';var tx=c.days===0?'сегодня':(c.days+' дн. назад');return '<span class="chip '+c.st+'">'+tx+'</span>';}
+  function mcxRatingRow(c,rank,max,lostMode){
+    var d=mcxPct(c.s,c.p),dh=lostMode?'<span class="mx-d dn">было '+fmtMoney(c.p)+'</span>':(d==null?'<span class="mx-d flat">новая</span>':'<span class="mx-d '+(d>=0?'up':'dn')+'">'+(d>=0?'+':'')+d+'%</span>');
+    var meta=[c.city,c.reg&&c.reg!=='СЕТИ'?c.reg:(c.fil==='Сети'?'Сети':''),c.mgr].filter(Boolean).join(' · ');
+    var bd=MCX_BR.map(function(b){return '<i style="background:'+((c.br&&c.br[b[0]]>0)?b[1]:'#EEEBE4')+'" title="'+b[0]+'"></i>';}).join('');
+    var val=lostMode?c.p:c.s;
+    var hasCard=!!(mcxAgg().idByName[c.name]);
+    return '<div class="mx-rt'+(hasCard?'':' nolink')+'"'+(hasCard?(' onclick="openClientByName(\''+mcxQ(c.name)+'\')"'):' title="карточки нет: компания без продаж в текущем периоде"')+'><span class="rk">'+rank+'</span>'
+      +'<div style="min-width:0"><div class="nm">'+esc(c.name)+(c.isNew&&!lostMode?'<span class="chip new">НОВАЯ</span>':'')+'</div><div class="mt">'+esc(meta||'—')+'</div></div>'
+      +'<div class="bd">'+bd+'</div><span>'+(lostMode?'':abcBadgeG(c.abc))+'</span>'
+      +'<div class="sv"><div class="mp"><span style="width:'+Math.max(2,Math.round(val/max*100))+'%"></span></div><b>'+fmtMoney(val)+'</b></div>'
+      +'<span class="dl">'+dh+'</span><span class="stc">'+(lostMode?'<span class="chip lost">без заказов</span>':mcxStatChip(c))+'</span></div>';}
+  function mcxRatingList(rows,limit,lostMode){
+    if(!rows.length)return '<div class="mx-empty">нет компаний под выбранные условия</div>';
+    var max=Math.max.apply(null,rows.slice(0,limit).map(function(c){return lostMode?c.p:c.s;}).concat([1]));
+    return mcxRatingHead()+rows.slice(0,limit).map(function(c,i){return mcxRatingRow(c,i+1,max,lostMode);}).join('');}
+
+  /* ---------- МЕНЕДЖЕРЫ: список ---------- */
+  function mcxMgrList(){
+    var A=mcxAgg(),M=mcxMgrs(A),named=M.filter(function(m){return !MCX_NONE[m.name];}),none=M.filter(function(m){return MCX_NONE[m.name];});
+    var team=named.reduce(function(s,m){return s+m.s;},0),teamP=named.reduce(function(s,m){return s+m.p;},0),cmp=named.reduce(function(s,m){return s+m.n;},0);
+    var maxS=Math.max.apply(null,M.map(function(m){return m.s;}).concat([1]));
+    function card(m){var ph=MCX_PHOTO[m.name],ini=m.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2);
+      return '<div class="mx-mc" onclick="mcxPickMgr(\''+mcxQ(m.name)+'\')"><div class="mx-ph">'+(ph?'<img src="assets/overview_v2/mgr/'+ph+'.png" alt="">':ini)+'</div>'
+        +'<div class="mx-mn">'+esc(m.name)+'</div><div class="mx-mf">'+esc(m.topOk?('ведёт: '+m.topOk):'без закрепления')+'</div>'
+        +'<div class="mx-mv">'+fmtMoney(m.s)+'</div>'+mcxDelta(m.s,m.p,'к АППГ')
+        +'<div class="mp"><span style="width:'+Math.max(3,Math.round(m.s/maxS*100))+'%"></span></div>'
+        +'<div class="mx-ms"><div><b>'+Math.round(m.s/(A.total||1)*100)+'%</b>доля</div><div><b>'+m.n+'</b>компаний</div><div><b>'+fmtMoney(m.avg)+'</b>ср. чек</div></div>'
+        +'<div class="mx-ma">Ключевых (A) компаний: <b>'+m.aN+'</b> · '+Math.round(m.aS/(m.s||1)*100)+'% выручки</div></div>';}
+    function grp(t,list,sub){if(!list.length)return '';var s=list.reduce(function(a,m){return a+m.s;},0);return '<div class="mx-grp"><div class="mx-gside">'+t+'<small>'+fmtMoney(s)+(sub?(' · '+sub):'')+'</small></div><div class="mx-cards">'+list.map(card).join('')+'</div></div>';}
+    var hero='<div class="mx-dark" style="margin-bottom:16px;display:grid;grid-template-columns:1.1fr 1.4fr;gap:28px;align-items:center"><div><div class="mx-cap">• Команда продаж</div><div class="mx-big" style="font-size:46px">'+fmtMoney(team)+'</div><div>'+mcxDelta(team,teamP,'к АППГ')+'</div></div>'
+      +'<div class="mx-dgrid" style="margin:0"><div><div class="mx-dv">'+named.length+'<span class="mx-du">менеджеров</span></div><div class="mx-dl">с продажами за период</div></div>'
+      +'<div><div class="mx-dv">'+cmp+'<span class="mx-du">компаний</span></div><div class="mx-dl">в портфелях менеджеров</div></div>'
+      +'<div><div class="mx-dv">'+Math.round(team/(A.total||1)*100)+'%</div><div class="mx-dl">доля менеджеров в продажах компании (остальное — сети и без закрепления)</div></div>'
+      +'<div><div class="mx-dv">'+(named[0]?esc(named[0].name.split(' ')[1]||named[0].name):'—')+'</div><div class="mx-dl">лидер по продажам · '+(named[0]?Math.round(named[0].s/(team||1)*100):0)+'% команды</div></div></div></div>';
+    return hero+grp('Владивосток',named.filter(function(m){return m.fil==='Владивосток';}))+grp('Москва',named.filter(function(m){return m.fil==='Москва';}))+grp('Без закрепления',none,'компании без менеджера')
+      +'<div class="mx-note">Менеджер относится к филиалу, где у него больше продаж. Продажи сетей к менеджерам не относятся. Клик по карточке — портфель менеджера.</div>';
+  }
+
+  /* ---------- МЕНЕДЖЕР: детализация ---------- */
+  function mcxMgrDetail(name){
+    var A=mcxAgg(),M=mcxMgrs(A),m=null;M.forEach(function(x){if(x.name===name)m=x;});
+    if(!m)return '<div class="mx-empty">менеджер не найден в выбранном периоде</div>';
+    var rows=m.rows.map(function(c){return Object.assign({},c);}).sort(function(a,b){return b.s-a.s;}),total=m.s||1,ph=MCX_PHOTO[name];mcxAbcOf(rows,function(x){return x.s;});
+    // портфель: регион -> город -> компании
+    var RG={};rows.forEach(function(c){var r=c.reg||'— регион не указан',ct=c.city||'— город не указан';var o=RG[r]||(RG[r]={s:0,n:0,cities:{}});o.s+=c.s;o.n++;var q=o.cities[ct]||(o.cities[ct]={s:0,list:[]});q.s+=c.s;q.list.push(c);});
+    var rgKeys=Object.keys(RG).sort(function(a,b){return RG[b].s-RG[a].s;}),cityN=0;rgKeys.forEach(function(r){cityN+=Object.keys(RG[r].cities).length;});
+    var rgMax=Math.max.apply(null,rgKeys.map(function(r){return RG[r].s;}).concat([1]));
+    var port=rgKeys.map(function(r,ri){var o=RG[r],cks=Object.keys(o.cities).sort(function(a,b){return o.cities[b].s-o.cities[a].s;});
+      var inner=cks.map(function(ck){var q=o.cities[ck];q.list.sort(function(a,b){return b.s-a.s;});
+        var cos=q.list.slice(0,8).map(function(c){return '<div class="mx-rgs" style="grid-template-columns:30px minmax(0,1fr) 96px 54px 54px;cursor:pointer" onclick="openClientByName(\''+mcxQ(c.name)+'\')"><span>'+abcBadgeG(c.abc)+'</span><span class="n">'+esc(c.name)+'</span><span class="v">'+fmtMoney(c.s)+'</span><span class="s">'+Math.round(c.s/total*100)+'%</span><span class="s">'+(mcxPct(c.s,c.p)==null?'нов.':((mcxPct(c.s,c.p)>=0?'+':'')+mcxPct(c.s,c.p)+'%'))+'</span></div>';}).join('')+(q.list.length>8?'<div class="mx-note">+ ещё '+(q.list.length-8)+' компаний</div>':'');
+        return '<details class="mx-rg"><summary><div class="mx-rgs"><span class="ar">›</span><span class="n">'+esc(ck)+'</span><div class="mp"><span style="width:'+Math.max(3,Math.round(q.s/o.s*100))+'%"></span></div><span class="v">'+fmtMoney(q.s)+'</span><span class="s">'+q.list.length+' комп.</span></div></summary><div class="mx-co">'+cos+'</div></details>';}).join('');
+      return '<details class="mx-rg"'+(ri===0?' open':'')+'><summary><div class="mx-rgs"><span class="ar">›</span><span class="n">'+esc(r)+'<span class="mx-lk" onclick="event.preventDefault();event.stopPropagation();drillTo({manager:[\''+mcxQ(name)+'\'],okrug:[\''+mcxQ(r)+'\']})">в Продажи ›</span></span><div class="mp"><span style="width:'+Math.max(3,Math.round(o.s/rgMax*100))+'%"></span></div><span class="v">'+fmtMoney(o.s)+'</span><span class="s">'+Math.round(o.s/total*100)+'%</span></div></summary><div class="mx-ci">'+inner+'</div></details>';}).join('');
+    // бренды и категории
+    var br={},cat={};rows.forEach(function(c){Object.keys(c.br).forEach(function(b){br[b]=(br[b]||0)+c.br[b];});Object.keys(c.cat).forEach(function(k){cat[k]=(cat[k]||0)+c.cat[k];});});
+    var brT=MCX_BR.reduce(function(s,b){return s+(br[b[0]]||0);},0)||1;
+    var brHtml=MCX_BR.map(function(b){var v=br[b[0]]||0,pc=Math.round(v/brT*100),cn=rows.filter(function(c){return c.br[b[0]]>0;}).length;return '<div class="mx-b"><div class="mx-btile" style="background:'+b[1]+';color:'+b[2]+'">'+b[0].toUpperCase()+'</div><div><div class="mp"><span style="width:'+Math.max(2,pc)+'%"></span></div><small>'+cn+' из '+rows.length+' компаний берут бренд</small></div><div class="mx-bv">'+fmtMoney(v)+'<small>'+pc+'%</small></div></div>';}).join('');
+    var catArr=Object.keys(cat).map(function(k){return {n:k,v:cat[k]};}).sort(function(a,b){return b.v-a.v;});var catMax=(catArr[0]&&catArr[0].v)||1,catT=catArr.reduce(function(s,x){return s+x.v;},0)||1;
+    var catHtml=catArr.slice(0,8).map(function(x){return '<div class="mx-cat"><span class="n" title="'+esc(x.n)+'">'+esc(x.n)+'</span><div class="mp"><span style="width:'+Math.max(2,Math.round(x.v/catMax*100))+'%"></span></div><span class="v">'+fmtMoney(x.v)+'</span><span class="s">'+Math.round(x.v/catT*100)+'%</span></div>';}).join('');
+    // ABC: компании менеджера и ассортимент относительно компании
+    var cc={A:{n:0,s:0},B:{n:0,s:0},C:{n:0,s:0}};rows.forEach(function(c){cc[c.abc].n++;cc[c.abc].s+=c.s;});
+    var mgSku={};rows.forEach(function(c){Object.keys(c.sk).forEach(function(k){if(c.sk[k]>0)mgSku[k]=(mgSku[k]||0)+c.sk[k];});});
+    var st={A:{t:0,b:0},B:{t:0,b:0},C:{t:0,b:0}},nbA=[];A.skArr.forEach(function(x){var s=st[x.abc];s.t++;if(mgSku[x.k])s.b++;else if(x.abc==='A')nbA.push(x);});
+    var abcHtml=['A','B','C'].map(function(k){var pp=st[k].t?Math.round(st[k].b/st[k].t*100):0;return '<span>'+abcBadgeG(k)+'</span><div class="mp"><span style="width:'+Math.max(2,pp)+'%"></span></div><b>'+pp+'%</b><span class="s">позиции: берёт '+st[k].b+' из '+st[k].t+' · компании: '+cc[k].n+' ('+Math.round(cc[k].s/total*100)+'% выручки)</span>';}).join('');
+    var nbHtml=nbA.length?('<div class="mx-note"><b class="r">Не продаёт из A:</b> '+nbA.slice(0,5).map(function(x){var si=D.txSkus[x.k]||['','—'];return esc(si[1]);}).join('; ')+(nbA.length>5?' и ещё '+(nbA.length-5):'')+'</div>'):'<div class="mx-note" style="color:#207E66">продаёт все A-позиции компании</div>';
+    // динамика по месяцам (факт и АППГ)
+    var CMg=D.clientManager||{},mon={},monP={};
+    for(var i=0;i<D.tx.length;i++){var t=D.tx[i],cn=D.txClients[t[1]];if(CMg[cn]!==name)continue;var y=Math.floor(t[0]/10000),mm=Math.floor(t[0]/100)%100;if(y===A.yr)mon[mm]=(mon[mm]||0)+t[4];else if(y===A.yr-1)monP[mm]=(monP[mm]||0)+t[4];}
+    var MN=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],mMax=1;for(var q=1;q<=12;q++)mMax=Math.max(mMax,mon[q]||0,monP[q]||0);
+    var monHtml='<div class="mx-mon">'+MN.map(function(l,q0){var q1=q0+1;return '<div><div class="bars"><i class="pv" style="height:'+Math.round((monP[q1]||0)/mMax*100)+'%"></i><i style="height:'+Math.round((mon[q1]||0)/mMax*100)+'%" title="'+l+': '+fmtMoney(mon[q1]||0)+'"></i></div>'+l+'</div>';}).join('')+'</div><div class="mx-note"><span style="display:inline-block;width:9px;height:9px;background:#2A2A2A;border-radius:2px"></span> '+A.yr+' &nbsp; <span style="display:inline-block;width:9px;height:9px;background:#D9D7CE;border-radius:2px"></span> '+(A.yr-1)+'</div>';
+    var lostM=A.lost.filter(function(c){return c.mgr===name;}),newM=rows.filter(function(c){return c.isNew;}).length;
+    var hero='<div class="mx-dark"><div style="display:flex;gap:16px;align-items:center"><div class="mx-ph" style="margin:0;width:92px;height:92px;flex:0 0 auto;font-size:24px">'+(ph?'<img src="assets/overview_v2/mgr/'+ph+'.png" alt="">':name.split(' ').map(function(w){return w[0];}).join('').slice(0,2))+'</div><div><div class="mx-cap">• Менеджер · '+esc(m.fil)+'</div><div style="font-family:Unbounded,sans-serif;font-weight:800;font-size:20px;margin-top:6px;line-height:1.15">'+esc(name)+'</div></div></div>'
+      +'<div class="mx-big">'+fmtMoney(m.s)+'</div><div>'+mcxDelta(m.s,m.p,'к АППГ')+'</div><div class="mx-rule"></div>'
+      +'<div class="mx-dgrid"><div><div class="mx-dv">'+Math.round(m.s/(A.total||1)*100)+'%</div><div class="mx-dl">доля в продажах компании</div></div><div><div class="mx-dv">'+m.n+'<span class="mx-du">компаний</span></div><div class="mx-dl">новых '+newM+' · потеряно '+lostM.length+'</div></div><div><div class="mx-dv">'+m.orders.toLocaleString('ru-RU')+'<span class="mx-du">заказов</span></div><div class="mx-dl">ср. чек '+fmtMoney(m.avg)+'</div></div><div><div class="mx-dv">'+rgKeys.length+'<span class="mx-du">регионов</span></div><div class="mx-dl">'+cityN+' городов</div></div></div>'
+      +'<button class="mx-cta" style="margin-top:24px" onclick="drillTo({manager:[\''+mcxQ(name)+'\']})">Срез в «Продажи» ›</button></div>';
+    var presence='<div class="mx-card"><div class="mx-ct"><span>• Портфель присутствия</span><em>регион → город → компании</em></div>'+'<div class="mx-pscroll">'+(port||'<div class="mx-empty">нет данных</div>')+'</div><div class="mx-note">Раскрывайте регион и город; клик по компании — карточка клиента с ABC и ассортиментом.</div></div>';
+    var lostRows=lostM.slice(0,6).map(function(c){return '<div class="mx-rgs" style="grid-template-columns:minmax(0,1fr) 96px 60px;cursor:pointer" onclick="openClientByName(\''+mcxQ(c.name)+'\')"><span class="n">'+esc(c.name)+'</span><span class="v">'+fmtMoney(c.p)+'</span><span class="s">было</span></div>';}).join('');
+    return '<div class="mx-top"><button class="mx-back" onclick="mcxPickMgr(null)">← Все менеджеры</button><span class="mx-sub">Портфель менеджера · период и АППГ — как в общем фильтре</span></div>'
+      +'<div class="mx-r1">'+hero+presence+'</div>'
+      +'<div class="mx-r2"><div class="mx-dark2"><span class="mx-cap" style="display:block;margin-bottom:14px">• Бренды в портфеле</span>'+brHtml+'</div><div class="mx-card"><div class="mx-ct"><span>• Категории</span><em>топ-8 по продажам</em></div>'+catHtml+'</div></div>'
+      +'<div class="mx-r2"><div class="mx-card"><div class="mx-ct"><span>• ABC портфеля</span><em>ABC компаний — внутри портфеля; ассортимент — к компании</em></div><div class="mx-abc">'+abcHtml+'</div>'+nbHtml+'</div><div class="mx-card"><div class="mx-ct"><span>• Динамика по месяцам</span><em>'+A.yr+' к '+(A.yr-1)+'</em></div>'+monHtml+(lostRows?'<div class="mx-ct" style="margin-top:18px"><span>• Потеряли компаний</span><em>'+lostM.length+'</em></div>'+lostRows:'')+'</div></div>'
+      +'<div class="mx-card"><div class="mx-ct"><span>• Рейтинг компаний менеджера</span><em>'+rows.length+' компаний · клик — карточка</em></div>'+mcxRatingList(rows,25,false)+'</div>';
+  }
+
+  /* ---------- КЛИЕНТЫ: рейтинг ---------- */
+  function mcxClients(){
+    var A=mcxAgg(),f=state.mcf||(state.mcf={sort:'s',limit:25});
+    var rows=A.rows,qq=(f.q||'').toLowerCase();
+    var regs={},mgrs={};rows.forEach(function(c){if(c.reg&&c.reg!=='СЕТИ')regs[c.reg]=1;if(c.mgr)mgrs[c.mgr]=1;});
+    var cnt={ok:0,warn:0,risk:0,nw:0},ab={A:{n:0,s:0},B:{n:0,s:0},C:{n:0,s:0}};
+    rows.forEach(function(c){cnt[c.st]++;if(c.isNew)cnt.nw++;ab[c.abc].n++;ab[c.abc].s+=c.s;});
+    var list;
+    if(f.status==='lost'){list=A.lost.slice();}
+    else{list=rows.filter(function(c){
+      if(f.status==='new'&&!c.isNew)return false;
+      if((f.status==='ok'||f.status==='warn'||f.status==='risk')&&c.st!==f.status)return false;
+      return true;});}
+    list=list.filter(function(c){
+      if(qq&&(c.name+' '+c.city+' '+c.mgr+' '+c.reg).toLowerCase().indexOf(qq)<0)return false;
+      if(f.reg&&c.reg!==f.reg)return false;
+      if(f.mgr&&c.mgr!==f.mgr)return false;
+      if(f.brand&&!(c.br&&c.br[f.brand]>0))return false;
+      if(f.abc&&f.status!=='lost'&&c.abc!==f.abc)return false;
+      return true;});
+    var lm=f.status==='lost',so=f.sort||'s';
+    list.sort(function(a,b){
+      if(lm)return b.p-a.p;
+      if(so==='d'){var da=mcxPct(a.s,a.p),db=mcxPct(b.s,b.p);return (db==null?-1e9:db)-(da==null?-1e9:da);}
+      if(so==='days')return (b.days||0)-(a.days||0);
+      if(so==='o')return b.orders-a.orders;
+      return b.s-a.s;});
+    var sum=list.reduce(function(s,c){return s+(lm?c.p:c.s);},0);
+    var pod=(!lm&&list.length>=3)?('<div class="mx-pod">'+list.slice(0,3).map(function(c,i){var d=mcxPct(c.s,c.p);return '<div class="mx-pc p'+(i+1)+'" onclick="openClientByName(\''+mcxQ(c.name)+'\')"><div class="pr">'+(i+1)+'</div><div class="pn">'+esc(c.name)+'</div><div class="pm">'+esc([c.city,c.mgr].filter(Boolean).join(' · ')||c.reg||'—')+'</div><div class="pv">'+fmtMoney(c.s)+'</div><div class="pm" style="margin-top:6px">'+Math.round(c.s/(A.total||1)*100)+'% продаж компании · '+(d==null?'новая':((d>=0?'▲ +':'▼ ')+d+'% к АППГ'))+'</div></div>';}).join('')+'</div>'):'';
+    var stBtn=function(k,l,n){return '<button class="'+((f.status||'')===k?'on':'')+'" onclick="mcxSet(\'status\',\''+k+'\')">'+l+'<b>'+n+'</b></button>';};
+    var tot=A.total||1,abHtml=['A','B','C'].map(function(k){return '<div>'+abcBadgeG(k)+'<b>'+ab[k].n+'</b>'+Math.round(ab[k].s/tot*100)+'% выручки</div>';}).join('');
+    var stack='<div class="mx-stack"><span style="width:'+(ab.A.s/tot*100)+'%;background:#2A2A2A"></span><span style="width:'+(ab.B.s/tot*100)+'%;background:#FDCF08"></span><span style="width:'+(ab.C.s/tot*100)+'%;background:#CAC4B8"></span></div>';
+    var kp='<div class="mx-kp"><div class="mx-dark" style="padding:20px 24px"><div class="mx-cap">• Компании с продажами</div><div class="mx-big" style="font-size:44px;margin:10px 0 4px">'+rows.length+'</div><div>'+mcxDelta(A.total,A.prevTotal,'выручка к АППГ')+'</div><div class="mx-dl" style="margin-top:6px">выручка '+fmtMoney(A.total)+' · потеряно '+A.lost.length+'</div></div>'
+      +'<div class="mx-card"><div class="mx-ct"><span>• ABC компаний</span><em>по выручке</em></div>'+stack+'<div class="mx-lg">'+abHtml+'</div></div>'
+      +'<div class="mx-card"><div class="mx-ct"><span>• Активность</span><em>по дате последнего заказа</em></div><div class="mx-sts">'+stBtn('','Все',rows.length)+stBtn('ok','Активные ≤45 дн.',cnt.ok)+stBtn('warn','Притихли 46–90',cnt.warn)+stBtn('risk','Давно без заказа >90',cnt.risk)+stBtn('new','Новые',cnt.nw)+stBtn('lost','Потеряны',A.lost.length)+'</div></div></div>';
+    var sel=function(k,all,opts){return '<select onchange="mcxSet(\''+k+'\',this.value)"><option value="">'+all+'</option>'+opts.map(function(o){return '<option value="'+esc(o)+'"'+(f[k]===o?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select>';};
+    var fl='<div class="mx-fl"><input id="mcxQ" placeholder="Поиск: компания, город, менеджер…" value="'+esc(f.q||'')+'" oninput="mcxSearch(this)">'
+      +sel('reg','Все регионы',Object.keys(regs).sort())+sel('mgr','Все менеджеры',Object.keys(mgrs).sort())+sel('brand','Все бренды',['KRONbuild','ENKI','HeadRock'])+sel('abc','Любой ABC',['A','B','C'])
+      +'<select onchange="mcxSet(\'sort\',this.value)">'+[['s','По продажам'],['d','По росту к АППГ'],['days','По давности заказа'],['o','По числу заказов']].map(function(o){return '<option value="'+o[0]+'"'+((f.sort||'s')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>'
+      +'<button class="btn mx-sp" onclick="mcxReset()">Сбросить</button><button class="btn" onclick="mcxExport()">⭳ CSV</button></div>';
+    var more=list.length>(f.limit||25)?'<button class="mx-more" onclick="mcxMore()">Показать ещё 25 · всего '+list.length+'</button>':'';
+    window.__mcxList=list;
+    return pod+kp+'<div class="mx-card"><div class="mx-ct"><span>• Рейтинг компаний'+(lm?' · потерянные':'')+'</span><em>показано '+Math.min(list.length,f.limit||25)+' из '+list.length+' · '+fmtMoney(sum)+(lm?' (продажи АППГ)':'')+'</em></div>'+fl+mcxRatingList(list,f.limit||25,lm)+more+'</div>'
+      +'<div class="mx-note">ABC компании — по накопленной выручке среди всех компаний периода (A до 80%, B до 95%, C остальные). Активность считается от даты последнего заказа до даты данных ('+esc(D.refDate||'')+'). «Потеряны» — покупали в аналогичном периоде прошлого года, в текущем нет. Клик по строке — карточка компании с ABC и ассортиментом (у потерянных компаний карточки нет — в текущем периоде у них нет продаж).</div>';
+  }
+
+  function mcxManagerPage(){var h=state.mgrSel?mcxMgrDetail(state.mgrSel):(pageHead('Менеджеры','Продажи, портфель и ABC по менеджерам. Клик по менеджеру — портфель: регионы, города, компании.')+mcxMgrList());return mcxCss()+'<div class="mx">'+h+'</div>';}
+  function mcxClientsPage(){return mcxCss()+'<div class="mx">'+pageHead('Клиенты','Рейтинг компаний по продажам, активности и ABC. Клик по компании — детализация и ABC по ассортименту.')+mcxClients()+'</div>';}
+  window.mcxPickMgr=function(n){state.mgrSel=n;if(window.render)render();if(window.scrollTo)scrollTo(0,0);};
+  window.mcxSet=function(k,v){var f=state.mcf||(state.mcf={sort:'s',limit:25});f[k]=v;if(k!=='sort')f.limit=25;if(window.render)render();};
+  window.mcxSearch=function(el){var f=state.mcf||(state.mcf={sort:'s',limit:25});f.q=el.value;f.limit=25;var pos=el.selectionStart;render();var n=document.getElementById('mcxQ');if(n){n.focus();try{n.setSelectionRange(pos,pos);}catch(e){}}};
+  window.mcxMore=function(){var f=state.mcf;f.limit=(f.limit||25)+25;if(window.render)render();};
+  window.mcxReset=function(){state.mcf={sort:'s',limit:25};if(window.render)render();};
+  window.mcxExport=function(){var L=window.__mcxList||[],lm=(state.mcf||{}).status==='lost';
+    var rows=[['Компания','Регион','Город','Менеджер','ABC','Продажи','АППГ','Заказов','Последний заказ','Дней без заказа']].concat(L.map(function(c){return [c.name,c.reg,c.city,c.mgr,lm?'':c.abc,Math.round(c.s),Math.round(c.p),c.orders,c.last||'',c.days==null?'':c.days];}));
+    var csv='﻿'+rows.map(function(r){return r.map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"';}).join(';');}).join('\n');
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='clients_rating.csv';document.body.appendChild(a);a.click();setTimeout(function(){document.body.removeChild(a);},500);};
+
+  function managerPage(){return mcxManagerPage();}
+  function clientsPage(){if(state.client)return clientDetailPage();return mcxClientsPage();}
+  function clientsPageOld(){if(state.client)return clientDetailPage();return `${pageHead('Клиенты','Клиенты, которые присутствуют в ABC-выгрузке, с фактическими продажами из отчета бизнес-регионов.')}${notice()}<div class="card pad"><div class="card-title">Клиенты с доступным ABC-анализом ${dataTag('source')}</div>${clientTable(D.clients,true)}</div><div class="notice" style="margin-top:12px">${ico('alert')} Для клиентов вне списка ABC можно показать продажи, но глубокая матрица «покупает / не покупает» потребует расширенной ABC-выгрузки на всю клиентскую базу.</div>`}
   
   function clientByPeriod(c){
     var D=window.KRS_DATA;
@@ -1957,13 +2216,13 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     if(p==='managers')state.mcTab='managers';
     if(p==='clients')state.mcTab='clients';
     var SUB={regions:'s_regions',turnover:'k_turn',logistics:'k_logi',signals:'k_sig'};var g=G[p]||'overview';if(SUB[p])state.sub=SUB[p];state.page=g;return g;}
-  function navSnap(){return {page:state.page,sub:state.sub,client:state.client,clientTab:state.clientTab,
+  function navSnap(){return {page:state.page,sub:state.sub,client:state.client,mgrSel:state.mgrSel,mcTab:state.mcTab,clientTab:state.clientTab,
       sf:JSON.parse(JSON.stringify(state.sf||{})),sfBy:state.sfBy,sfWH:state.sfWH,sfOpen:state.sfOpen,sfCliQ:state.sfCliQ,sfLimit:state.sfLimit,
       period:JSON.parse(JSON.stringify(window.PERIOD||{mode:'ytd'})),search:state.search,segment:state.segment,
       branch:state.branch,brand:state.brand,region:state.region,manager:state.manager,salesMode:state.salesMode,abcPick:state.abcPick};}
-  function navKey(s){return [s.page,s.sub,s.client].join('|');}
+  function navKey(s){return [s.page,s.sub,s.client,s.mgrSel,s.mcTab].join('|');}
   window.navBack=function(){var st=window.__navStack||[];if(!st.length)return;var q=st.pop();
-    state.page=q.page;state.sub=q.sub;state.client=q.client;state.clientTab=q.clientTab;
+    state.page=q.page;state.sub=q.sub;state.client=q.client;state.clientTab=q.clientTab;state.mgrSel=q.mgrSel;state.mcTab=q.mcTab;
     state.sf=q.sf;state.sfBy=q.sfBy;state.sfWH=q.sfWH;state.sfOpen=q.sfOpen;state.sfCliQ=q.sfCliQ;state.sfLimit=q.sfLimit;
     window.PERIOD=q.period;state.search=q.search;state.segment=q.segment;state.branch=q.branch;state.brand=q.brand;state.region=q.region;state.manager=q.manager;state.salesMode=q.salesMode;state.abcPick=q.abcPick;
     window.__navRestoring=true;window.__navLast=q;
