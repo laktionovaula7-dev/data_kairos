@@ -514,25 +514,29 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
       +'<div class="dm"><div class="dv">'+(o.units||0).toLocaleString("ru-RU")+'<span class="du">штук</span></div>'+_ddu(yoy.units)+'</div>'
       +'</div></div>';
 
-    var behind=(planPct!=null&&planPct<100);
+    // план на дату: для текущего года сравниваем с планом за прошедшие дни, а не со всем годом
+    var _ptd=null;(function(){if(_isMo)return;var pm=(D.plan&&D.plan[_yr]&&D.plan[_yr].months)||null;if(!pm)return;var last=12;for(var m=12;m>=1;m--){if(D.ym&&D.ym[_yr+(m<10?'0'+m:m)]){last=m;break;}}var s2=0;for(var m=1;m<=last;m++)s2+=(pm[m]||0)*planFrac(+_yr,m);_ptd=s2||null;})();
+    var behind=(_ptd?(fact<_ptd):(planPct!=null&&planPct<100));
     var vfill=_planBase?Math.max(.02,Math.min(1,fact/_planBase)):0;
     function _pcCls(pc){return pc==null?'':(pc>=0.9?'g':(pc>=0.6?'a':'r'));}
     var fils='';['Москва','Владивосток','Сети'].forEach(function(f){var dh=_F3[f]||{};var fa=(_FF[f]&&_FF[f].fact!=null)?_FF[f].fact:(dh.fact||0);var pv=(dh.plan!=null)?Math.round(dh.plan*pw):null;var pc=pv?fa/pv:null;
       fils+='<div class="fil" style="cursor:pointer" onclick="drillTo({filial:[\''+f+'\']})"><div class="fn">'+f+'</div><div class="fv">'+fmtMoney(fa)+'</div><div class="mp"><span style="width:'+(pc!=null?Math.max(2,Math.min(100,pc*100)):0)+'%"></span></div><div class="fpc"><span>план '+(pv!=null?fmtMoney(pv):"—")+'</span><span class="fpct '+_pcCls(pc)+'">'+(pc!=null?Math.round(pc*100)+"%":"")+'</span></div></div>';});
-    var card2='<div class="card"><div class="ct">• Выполнение плана · '+_planLbl+'<span class="chip '+(behind?"behind":"ahead")+'">'+(behind?"отстаём от плана":"идём по плану")+'</span></div>'
+    var card2='<div class="card"><div class="ct">• Выполнение плана · '+_planLbl+'<span class="chip '+(behind?"behind":"ahead")+'">'+(behind?(_ptd?"отстаём от плана на дату":"отстаём от плана"):(_ptd?"опережаем план на дату":"идём по плану"))+'</span></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end"><div class="plan-big" data-cnt="'+(planPct||0)+'" data-fmt="pct">'+(planPct!=null?planPct+"%":"—")+'</div>'
       +'<div style="text-align:right;font-size:12px;color:#5c5e61">факт <b>'+fmtMoney(fact)+'</b><br>план '+fmtMoney(_planBase||0)+'</div></div>'
       +'<div class="track"><span style="width:'+(vfill*100).toFixed(1)+'%"></span></div>'
-      +'<div class="tscale"><span>0</span><span>'+fmtMoney(fact)+'</span><span>'+fmtMoney(_planBase||0)+'</span></div>'
+      +'<div class="tscale"><span>0</span><span>'+fmtMoney(fact)+'</span><span>'+fmtMoney(_planBase||0)+'</span></div>'+(_ptd?('<div style="font-size:12px;color:#5c5e61;margin-top:8px">К плану на '+cutTxt()+': <b>'+Math.round(fact/_ptd*100)+'%</b> · план на дату '+fmtMoney(_ptd)+'</div>'):'')
       +'<div class="fils">'+fils+'</div>'+'<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="ovn-arrow" data-tip="Детализация по филиалам" onclick="drillTo({filial:[\'Москва\',\'Владивосток\',\'Сети\']},\'okrugs\')">›</button></div></div>';
 
     var _selM=null;var _smm=_Pm.match(/^(\d{4})-(\d{2})$/);if(_smm&&+_smm[1]===+_yr)_selM=+_smm[2];
     var monHtml=months.map(function(x,i){var hf=(x.fact||0)/mmax*100,hp=(x.plan||0)/mmax*100;
       var pcp=(x.plan>0)?Math.round((x.fact||0)/x.plan*100):null,dAP=(x.prev>0)?Math.round(((x.fact||0)-x.prev)/x.prev*100):null;
       var tip=MN[i]+'\nфакт: '+fmtMoney((x.fact||0)*1e6)+'\nплан: '+(x.plan?fmtMoney(x.plan*1e6):'—')+'\n% плана: '+(pcp!=null?pcp+'%':'—')+'\nдельта: '+(dAP!=null?((dAP>=0?'+':'')+dAP+'%'):'—');
-      var pl=(pcp!=null)?('<div class="mpct '+(pcp>=100?'g':(pcp>=70?'a':'r'))+'">'+pcp+'%</div>'):'<div class="mpct">&nbsp;</div>';
+      var _ct0=dataCut(),_isPart=!!(_ct0&&_ct0.partial&&_ct0.y===+_yr&&_ct0.m===(i+1));
+      if(_isPart)tip+='\nмесяц неполный: данные по '+cutTxt()+', процент плана не показан';
+      var pl=_isPart?'<div class="mpct" style="color:#8b8d90;font-size:10px" title="Месяц не закрыт: данные по '+cutTxt()+'">неполн.</div>':((pcp!=null)?('<div class="mpct '+(pcp>=100?'g':(pcp>=70?'a':'r'))+'">'+pcp+'%</div>'):'<div class="mpct">&nbsp;</div>');
       return '<div class="mo'+(_selM===(i+1)?' sel':'')+'" data-tip="'+esc(tip)+'">'+pl+'<div class="bars"><div class="bf" style="height:'+Math.max(2,hf).toFixed(1)+'%"></div><div class="bp" style="height:'+Math.max(2,hp).toFixed(1)+'%"></div></div><div class="ml">'+MN[i]+'</div></div>';}).join('');
-    var monCard='<div class="card"><div class="ct">• Продажи по месяцам<span class="mleg"><i class="dotf"></i>факт<i class="dotp"></i>план</span></div><div class="months">'+monHtml+'</div></div>';
+    var monCard='<div class="card"><div class="ct">• Продажи по месяцам<span class="mleg"><i class="dotf"></i>факт<i class="dotp"></i>план</span></div><div class="months">'+monHtml+'</div>'+((function(){var c=dataCut();return (c&&c.partial&&c.y===+_yr)?('<div style="font-size:11.5px;color:#8b8d90;margin-top:10px">Данные по '+cutTxt()+'.'+c.y+': '+MN[c.m-1].toLowerCase()+' ещё не закрыт — факт неполный, % плана за него не считается.</div>'):'';})())+'</div>';
     var _ba=(D.plan&&D.plan[_yr]&&D.plan[_yr].brandAnnual)||{},_bpm=(D.plan&&D.plan[_yr]&&D.plan[_yr].brands)||{};
     var _keFact=kr+en,_hrFact=hr,planKE,planHR;
     if(_isMo){var _rb=periodRange(),_fb=Math.floor((_rb[0]%10000)/100)||1,_lb=Math.floor((_rb[1]%10000)/100)||12;planKE=0;planHR=0;for(var _mb=_fb;_mb<=_lb;_mb++){planKE+=((_bpm.kronenki||{})[_mb]||0);planHR+=((_bpm.headrock||{})[_mb]||0);}}
@@ -865,7 +869,7 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     if(window.__mcx&&window.__mcx.key===key)return window.__mcx;
     var yr=Math.floor(lo/10000),fM=Math.floor((lo%10000)/100)||1,lM=Math.floor((hi%10000)/100)||12,lastData=fM;
     for(var m=12;m>=fM;m--){var kk=''+yr+(m<10?'0'+m:m);if(D.ym&&D.ym[kk]){lastData=m;break;}}
-    var effM=Math.min(lM,lastData),pl=(yr-1)*10000+fM*100+1,ph=(yr-1)*10000+effM*100+31;
+    var effM=Math.min(lM,lastData),pl=(yr-1)*10000+fM*100+1,ph=prevEndFor(yr,effM);
     var refN=D.refDate?parseInt(D.refDate.replace(/-/g,'')):hi;
     var CM=D.clientManager||{},CR=D.clientRegion||{},CT=D.clientCity||{},CC=D.clientChannel||{},CF=D.clientFilial||{};
     var cl={},lastAll={},companySku={};
@@ -1748,7 +1752,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       if(sf.product.length&&sf.product.indexOf(prodOf(sk))<0)return false;
       return true;}
     function cliGeoPass(cn){return inSel(sf.client,cn)&&inSel(sf.filial,fil3(cn))&&inSel(sf.okrug,CR[cn])&&inSel(sf.city,CT[cn])&&inSel(sf.manager,CM[cn]);}
-    var _fM=Math.floor((lo%10000)/100)||1,_lM=Math.floor((hi%10000)/100)||12,_lastData=_fM;for(var _m=12;_m>=_fM;_m--){var _kk=''+yr+(_m<10?'0'+_m:_m);if(D.ym&&D.ym[_kk]){_lastData=_m;break;}}var _effM=Math.min(_lM,_lastData);var _pl=(yr-1)*10000+_fM*100+1,_ph=(yr-1)*10000+_effM*100+31;
+    var _fM=Math.floor((lo%10000)/100)||1,_lM=Math.floor((hi%10000)/100)||12,_lastData=_fM;for(var _m=12;_m>=_fM;_m--){var _kk=''+yr+(_m<10?'0'+_m:_m);if(D.ym&&D.ym[_kk]){_lastData=_m;break;}}var _effM=Math.min(_lM,_lastData);var _pl=(yr-1)*10000+_fM*100+1,_ph=prevEndFor(yr,_effM);
     var sales=0,qty=0,ord={},cl={},byM={},byMp={},byDim={},byCityN={},byCityP={},byCityCl={},okP={},okCl={},byMBrP={},okBrP={},byBrCityP={},byCli={},byCliP={},byBrCity={},byBrCl={},bySku={},okS={},bcs={},byBr={HeadRock:0,KRONbuild:0,ENKI:0},byMBr={},okBr={},mgS={},mgBr={},mgOk={},mgCl={},bySkuPrev={},byCat={},ps=0,pq=0,pcl={},por={};
     for(var i=0;i<D.tx.length;i++){var t=D.tx[i],cn=D.txClients[t[1]],sk=t[2];if(!match(cn,sk))continue;var d=t[0],y=Math.floor(d/10000),mm=(''+d).slice(4,6);
       if(y===yr){byM[mm]=(byM[mm]||0)+t[4];var _bm=brOf(sk);if(!byMBr[_bm])byMBr[_bm]={};byMBr[_bm][mm]=(byMBr[_bm][mm]||0)+t[4];}else if(y===yr-1){byMp[mm]=(byMp[mm]||0)+t[4];var _bq2=brOf(sk);if(!byMBrP[_bq2])byMBrP[_bq2]={};byMBrP[_bq2][mm]=(byMBrP[_bq2][mm]||0)+t[4];}
@@ -1815,11 +1819,12 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var _planBks=selFil.map(function(f){return _bucketOf[f];}).filter(Boolean);
     var _planGrps=[];if(!_bsel.length){_planGrps=['kronenki','headrock'];}else{if(_hasK||_hasE)_planGrps.push('kronenki');if(_hasH)_planGrps.push('headrock');}
     function _coPlan(mi){if(!_planOk)return null;var t=0;_planBks.forEach(function(bk){_planGrps.forEach(function(g){t+=(((_cells[bk]||{})[g]||{})[mi])||0;});});return t;}
-    var _planYtdS=0;if(_planOk){for(var _pm=_fM;_pm<=_effM;_pm++)_planYtdS+=_coPlan(_pm)||0;}
+    var _planYtdS=0;if(_planOk){for(var _pm=_fM;_pm<=_effM;_pm++)_planYtdS+=(_coPlan(_pm)||0)*planFrac(yr,_pm);}
+    var _cutC=dataCut(),_partialCut=!!(_cutC&&_cutC.partial&&_cutC.y===yr&&_effM===_cutC.m);
     var _planBlock;
-    if(_planOk&&_planYtdS>0){var _pd=sales/_planYtdS*100,_rem=Math.max(0,_planYtdS-sales);_planBlock='<div class="s-bt-l">Выполнение плана</div><div class="s-bt-row"><div class="s-bt-big">'+Math.round(_pd)+'%</div><div class="s-track2"><span style="width:'+Math.min(100,Math.max(2,_pd))+'%"></span></div></div><div class="s-bt-sub">План '+fmtMoney(_planYtdS)+' · '+(_rem>0?('До плана '+fmtMoney(_rem)):('Сверх плана '+fmtMoney(sales-_planYtdS)))+'</div>';}
+    if(_planOk&&_planYtdS>0){var _pd=sales/_planYtdS*100,_rem=Math.max(0,_planYtdS-sales);_planBlock='<div class="s-bt-l">Выполнение плана</div><div class="s-bt-row"><div class="s-bt-big">'+Math.round(_pd)+'%</div><div class="s-track2"><span style="width:'+Math.min(100,Math.max(2,_pd))+'%"></span></div></div><div class="s-bt-sub">'+(planFrac(yr,_effM)<1?('План на '+cutTxt()+' (месяц пропорционально дням)'):'План')+' '+fmtMoney(_planYtdS)+' · '+(_rem>0?('До плана '+fmtMoney(_rem)):('Сверх плана '+fmtMoney(sales-_planYtdS)))+'</div>';}
     else{_planBlock='<div class="s-bt-l">Выполнение плана</div><div class="s-bt-row"><div class="s-bt-big s-bt-na">—</div></div><div class="s-bt-sub">'+((!_brPlanOk)?'план задан на KRONbuild+ENKI вместе — выберите оба бренда':'план задан только по филиалам и брендам — без региона, города, менеджера, клиента')+'</div>';}
-    var _band='<div class="card s-band"><div class="s-band-top"><div class="s-bt-cell"><div class="s-bt-l">Продажи</div><div class="s-bt-row"><div class="s-bt-big">'+fmtMoney(sales)+'</div>'+_dchip(_heroDelta)+'</div><div class="s-bt-sub">к тому же периоду '+_prevYr+' года</div></div><div class="s-bt-div"></div><div class="s-bt-cell">'+_planBlock+'</div></div>'
+    var _band='<div class="card s-band"><div class="s-band-top"><div class="s-bt-cell"><div class="s-bt-l">Продажи</div><div class="s-bt-row"><div class="s-bt-big">'+fmtMoney(sales)+'</div>'+_dchip(_heroDelta)+'</div><div class="s-bt-sub">к тому же периоду '+_prevYr+' года'+((_partialCut)?(' (по '+cutTxt()+')'):'')+'</div></div><div class="s-bt-div"></div><div class="s-bt-cell">'+_planBlock+'</div></div>'
       +'<div class="s-band-metrics">'+_bMet('Клиенты',String(nCl),_pg(nCl,pCl))+_bMet('Дни покупок',String(nOrd),_pg(nOrd,pOrd))+_bMet('Продажи на день покупки',fmtMoney(nOrd?Math.round(sales/nOrd):0),_dAvg)+_bMet('Продано, шт',qty.toLocaleString('ru-RU'),_pg(qty,pq))+_bMet('SKU',String(Object.keys(bySku).length),null)+'</div></div>';
     var brandStrip='';
     var MN=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
@@ -2539,6 +2544,11 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
   });
 
   window.PERIOD=window.PERIOD||{mode:'ytd'};
+  /* Граница данных: последний день в выгрузке. Неполный месяц сравниваем с прошлым годом по тем же датам, план берём пропорционально дням. */
+  function dataCut(){var D=window.KRS_DATA||{},r=D.refDate?parseInt(String(D.refDate).replace(/-/g,'')):0;if(!r)return null;var y=Math.floor(r/10000),m=Math.floor(r/100)%100,d=r%100,dim=new Date(y,m,0).getDate();return {y:y,m:m,d:d,dim:dim,partial:d<dim,n:r};}
+  function prevEndFor(yr,effM){var c=dataCut(),day=(c&&c.partial&&c.y===yr&&c.m===effM)?c.d:31;return (yr-1)*10000+effM*100+day;}
+  function planFrac(yr,m){var c=dataCut();return (c&&c.partial&&c.y===yr&&c.m===m)?c.d/c.dim:1;}
+  function cutTxt(){var c=dataCut();return c?(String(c.d).padStart(2,'0')+'.'+String(c.m).padStart(2,'0')):'';}
   function periodRange(){
     var P=window.PERIOD||{mode:'ytd'};
     if(P.mode==='custom'&&P.from&&P.to){return [parseInt(P.from.replace(/-/g,'')),parseInt(P.to.replace(/-/g,''))];}
@@ -2593,7 +2603,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       o.returns=Math.round(curRet);o.grossSales=Math.round(grossP||(sales-curRet));o.returnsRate=grossP?+(((-curRet)/grossP)*100).toFixed(2):0;
       var planP=0,hasPlan=false;if(planY){for(var m=fM;m<=lM;m++){if(planY[m]!=null){planP+=planY[m];hasPlan=true;}}}
       o.planPeriod=hasPlan?Math.round(planP):null;o.planDonePeriod=(o.planPeriod)?+((sales/o.planPeriod)*100).toFixed(1):null;
-      var pl=(yr-1)*10000+fM*100+1,ph=(yr-1)*10000+effM*100+31,ps=0,pq=0,pcl={},por={};for(var i=0;i<D.tx.length;i++){var t=D.tx[i],d=t[0];if(d<pl||d>ph)continue;ps+=t[4];pq+=t[3];pcl[t[1]]=1;por[t[1]+'|'+d]=1;}
+      var pl=(yr-1)*10000+fM*100+1,ph=prevEndFor(yr,effM),ps=0,pq=0,pcl={},por={};for(var i=0;i<D.tx.length;i++){var t=D.tx[i],d=t[0];if(d<pl||d>ph)continue;ps+=t[4];pq+=t[3];pcl[t[1]]=1;por[t[1]+'|'+d]=1;}
       o.prev={sales:Math.round(ps),units:Math.round(pq),clients:Object.keys(pcl).length,orders:Object.keys(por).length,returns:Math.round(prevRet)};
       o.growth=ps?+(((sales-ps)/ps)*100).toFixed(1):null;})();
     o.brandFact={headrock:Math.round(byBrand['HeadRock']||0),kron:Math.round(byBrand['KRONbuild']||0),enki:Math.round(byBrand['ENKI']||0)};

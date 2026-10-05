@@ -771,8 +771,14 @@ def build_krs(S, stock, plan, crm, price):
         orders_cur+=sum(1 for h in hist if h['date'].endswith(str(CUR)))
     grow=lambda a,b: (round((a-b)/b*100,1) if b else None)
     cur_month=int(maxd[4:6]) if len(maxd)==8 else 12
-    prev_same=sum(ym.get(f"{PREV}{mi:02d}",0) for mi in range(1,cur_month+1))   # АППГ: те же месяцы прошлого года
-    plan_ytd=sum(plancur.get('months',{}).get(mi,0) for mi in range(1,cur_month+1)) if plancur else None
+    # граница данных: неполный последний месяц сравниваем с прошлым годом по ТЕМ ЖЕ датам, план — пропорционально дням
+    import calendar
+    _cut_d=int(maxd[6:8]) if len(maxd)==8 else 31
+    _dim=calendar.monthrange(CUR,cur_month)[1]
+    _partial=_cut_d<_dim
+    _prev_cut=PREV*10000+cur_month*100+(_cut_d if _partial else 31)
+    prev_same=sum(_t[4] for _t in S['tx'] if PREV*10000+101<=_t[0]<=_prev_cut)   # АППГ: тот же период прошлого года
+    plan_ytd=sum(plancur.get('months',{}).get(mi,0)*((_cut_d/_dim) if (mi==cur_month and _partial) else 1) for mi in range(1,cur_month+1)) if plancur else None
     # АППГ для героя: клиенты/заказы/штуки за ТЕ ЖЕ месяцы прошлого года (из истории заказов)
     def _dm(ds):
         try: p=ds.split('.'); return (int(p[2]),int(p[1]))
@@ -783,6 +789,7 @@ def build_krs(S, stock, plan, crm, price):
         for _h in _hist:
             _y,_mo=_dm(_h.get('date',''))
             if _mo<1 or _mo>cur_month: continue
+            if _y==PREV and _mo==cur_month and _partial and int(_h.get('date','00.00.0000')[:2] or 0)>_cut_d: continue
             if _y==CUR: _oc+=1; _uc+=_h.get('qty',0); _cc.add(_cl)
             elif _y==PREV: _op+=1; _up+=_h.get('qty',0); _cp.add(_cl)
     yoy={'sales':grow(o_cur['net'],prev_same),'clients':grow(len(_cc),len(_cp)),'orders':grow(_oc,_op),'units':grow(_uc,_up)}
