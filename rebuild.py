@@ -34,6 +34,9 @@ F_EXPIRY=ROOT/"Отчет по товарам на складах с оконч�
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
+# Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
+F_TRACK= _pick(DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
+               DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления.xlsx")
 
 def _find_client_inn():
     if CRM_DIR.exists():
@@ -423,6 +426,64 @@ def load_stock():
               'wh':{k:round(val,1) for k,val in d['wh'].items() if abs(val)>=0.5}} for a,d in agg.items()}
     print(f"  остатки: оборачиваемость по «{STOCK_WAREHOUSE}», «Всего доступно» по всем складам — {len(stock)} артикулов")
     return stock
+
+# ---------------- СЛЕЖЕНИЕ / В ПУТИ (заказы поставщику, Китай) ----------------
+def load_tracking(price):
+    import openpyxl
+    if not F_TRACK.exists(): print("  [!] нет файла слежения (в пути)"); return []
+    ns='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'; lv={}
+    try:
+        with zipfile.ZipFile(F_TRACK).open('xl/worksheets/sheet1.xml') as fp:
+            for ev,el in ET.iterparse(fp,events=('end',)):
+                if el.tag==ns+'row':
+                    rr=int(el.get('r')); ol=el.get('outlineLevel'); lv[rr]=int(ol) if ol else 0; el.clear()
+    except Exception as e:
+        print("  [!] слежение: уровни группировки:",e)
+    def _d(v):
+        if isinstance(v,str):
+            m=re.match(r'(\d{2})\.(\d{2})\.(20\d{2})',v)
+            if m: return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+        return None
+    def _dest(wh):
+        n=(wh or '').lower()
+        if 'новосиб' in n or 'слк' in n: return 'Новосибирск'
+        if 'сети' in n: return 'СЕТИ'
+        if 'влад' in n or 'опт вл' in n or n.endswith(' вл') or 'янковск' in n or 'мангут' in n: return 'Владивосток'
+        if 'мск' in n or 'москва' in n: return 'Москва'
+        return 'Прочее'
+    wb=openpyxl.load_workbook(F_TRACK,read_only=True,data_only=True)
+    ws=wb[wb.sheetnames[0]]; stack={}; agg={}; r=0
+    for row in ws.iter_rows(min_row=1,values_only=True):
+        r+=1
+        if r<11: continue
+        L=lv.get(r,0); a=row[0] if len(row)>0 else None; name=row[6] if len(row)>6 else None
+        if a is not None and name is None:
+            stack[L]=str(a).strip()
+            for k in [x for x in list(stack) if x>L]: stack.pop(k,None)
+            continue
+        if name is None: continue
+        doc=stack.get(1,'') or ''
+        if not doc.lower().startswith('заказ поставщику'): continue   # только заказы поставщику (Китай)
+        wh=stack.get(0,'') or ''; wl=wh.lower()
+        status='В производстве' if wl.startswith('в производстве') else ('В пути' if wl.startswith('в пути') else 'Поступил')
+        if status=='Поступил': continue   # уже на адресном складе — учитывается в остатках
+        try: qty=float(row[10]) if len(row)>10 and row[10] not in (None,'') else 0
+        except (TypeError,ValueError): qty=0
+        if qty<=0: continue
+        nm=str(name).strip()
+        m=re.search(r'от (\d{2}\.\d{2}\.20\d{2})',doc); od=m.group(1) if m else ''
+        port=_d(row[2] if len(row)>2 else None); ktk=_d(row[4] if len(row)>4 else None); eta=_d(row[5] if len(row)>5 else None)
+        cat,art=cat_art(nm,price); br=brand_of(nm,price)
+        key=(art or nm, _dest(wh), status, eta or '', port or '', ktk or '', od)
+        if key in agg: agg[key]['qty']+=qty
+        else: agg[key]={'name':nm,'art':art or '','brand':br,'cat':group_cat(cat,br,nm),
+            'qty':qty,'status':status,'dest':_dest(wh),'wh':wh,'order':od,'port':port,'ktk':ktk,'eta':eta}
+    wb.close()
+    out=[dict(v,qty=round(v['qty'])) for v in agg.values()]
+    out.sort(key=lambda x:(x['eta'] or '9999',x['status']))
+    nprod=sum(1 for o in out if o['status']=='В производстве'); ntr=sum(1 for o in out if o['status']=='В пути')
+    print(f"  в пути/в производстве: {len(out)} позиций заказов поставщику (в производстве {nprod}, в пути {ntr})")
+    return out
 
 # ---------------- СРОКИ ГОДНОСТИ (по сериям) ----------------
 RAW_EXPIRY={}
@@ -1045,6 +1106,7 @@ if __name__=='__main__':
     pickle.dump({'S':S,'stock':stock,'plan':plan,'crm':crm,'price':price}, open(ROOT/"work"/"_parsed.pkl","wb"))
     print("Собираю модель…")
     KRS=build_krs(S,stock,plan,crm,price)
+    KRS['incoming']=load_tracking(price)
     ov=KRS['overview']
     print(f"  overview {CUR_YEAR}: продажи {ov['sales']:,} ₽ | план YTD {ov['planYTD']:,} | "
           f"выполн {ov['planDone']}% | АППГ {ov['growth']}% (к тем же мес. {CUR_YEAR-1})")
