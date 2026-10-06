@@ -127,6 +127,13 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && st.open) { st.open = false; st.first = null; refreshPops(); } });
 
+root.krsPeriodRange = function () { var r = rangeOf(root.PERIOD || { mode: 'ytd' }); return { from: [r[0], r[1]], to: [r[3], r[4]] }; };
+root.krsMonthList = function () { var r0 = ref(), out = []; years().forEach(function (y) { for (var m = 1; m <= 12; m++) { if (y > r0.y || (y === r0.y && m > r0.m)) continue; out.push([y, m]); } }); return out; };
+root.krsMonthSel = function () {
+  var f = document.getElementById('sfMF').value.split('-').map(Number), t = document.getElementById('sfMT').value.split('-').map(Number);
+  if (ymKey(f[0], f[1]) > ymKey(t[0], t[1])) { var x = f; f = t; t = x; }
+  rangeApply(f, t);
+};
 root.krsPeriodUI = function () {
   return '<div class="kpp' + (st.open ? ' open' : '') + '"><button type="button" class="kpp-pill" data-kpp="toggle">' + esc(label()) + ' <i>▾</i></button><div class="kpp-pop">' + (st.open ? popHtml() : '') + '</div></div>';
 };
