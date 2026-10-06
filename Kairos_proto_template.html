@@ -145,70 +145,189 @@ window.KAIROS_LOGOS = {"headrock":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   }
   const pageHead=(title,sub,crumb='',actions='')=>`${crumb?`<div class="breadcrumb">${crumb}</div>`:''}<div class="page-head"><div><h1>${title}</h1><div class="page-sub">${sub}</div></div>${actions?`<div class="page-actions">${actions}</div>`:''}</div>${globalFilters()}`;
   function whDate(iso){if(!iso)return '<span class="mu">—</span>';return iso.slice(8,10)+'.'+iso.slice(5,7)+'.'+iso.slice(0,4);}
+  function whNum(n){return (Math.round(n)||0).toLocaleString('ru-RU');}
+  function whQ(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+  window.whGoTab=function(t){state.whTab=t;if(window.render)render();if(window.scrollTo)scrollTo(0,0);};
   window.setWhF=function(k,v){state.whF=state.whF||{status:'',dest:'',q:''};state.whF[k]=(state.whF[k]===v?'':v);state.whLimit=40;if(window.render)render();};
   window.whMore=function(){state.whLimit=(state.whLimit||40)+60;if(window.render)render();};
   window.whSearch=function(v){state.whF=state.whF||{status:'',dest:'',q:''};state.whF.q=v;state.whLimit=40;if(window.render)render();var n=document.getElementById('whSearch');if(n){n.focus();try{n.setSelectionRange(v.length,v.length)}catch(_){}}};
+  window.whSSet=function(k,v){state.whS=state.whS||{wh:'',status:'',q:''};state.whS[k]=(state.whS[k]===v?'':v);state.whSLim=60;if(window.render)render();};
+  window.whSSearch=function(v){state.whS=state.whS||{wh:'',status:'',q:''};state.whS.q=v;state.whSLim=60;if(window.render)render();var n=document.getElementById('whSSearch');if(n){n.focus();try{n.setSelectionRange(v.length,v.length)}catch(_){}}};
+  window.whSMore=function(){state.whSLim=(state.whSLim||60)+80;if(window.render)render();};
+  window.whDSet=function(k,v){state.whD=state.whD||{edet:'',q:''};state.whD[k]=(state.whD[k]===v?'':v);state.whDLim=40;if(window.render)render();};
+  window.whDSearch=function(v){state.whD=state.whD||{edet:'',q:''};state.whD.q=v;state.whDLim=40;if(window.render)render();var n=document.getElementById('whDSearch');if(n){n.focus();try{n.setSelectionRange(v.length,v.length)}catch(_){}}};
+  window.whDMore=function(){state.whDLim=(state.whDLim||40)+60;if(window.render)render();};
+  // продажи по SKU: текущий период (YTD) и тот же период прошлого года — один проход по D.tx, кэш
+  function whSkuAgg(){
+    if(window.__whAgg)return window.__whAgg;
+    var tx=D.tx||[];var hi=+((D.dataAsOf||'2026-12-31').replace(/-/g,''));
+    var yr=Math.floor(hi/10000);var loCur=yr*10000+101,hiCur=hi,loPrev=loCur-10000,hiPrev=hiCur-10000;
+    var cur={},prev={};
+    for(var i=0;i<tx.length;i++){var t=tx[i],d=t[0],si=t[2],q=t[3]||0,n=t[4]||0;
+      if(d>=loCur&&d<=hiCur){var c=cur[si]||(cur[si]=[0,0]);c[0]+=q;c[1]+=n;}
+      else if(d>=loPrev&&d<=hiPrev){var p=prev[si]||(prev[si]=[0,0]);p[0]+=q;p[1]+=n;}}
+    window.__whAgg={cur:cur,prev:prev,loPrev:loPrev,hiPrev:hiPrev};return window.__whAgg;
+  }
+  // карта артикул -> {qty, nextEta, status} из «в пути»
+  function whIncomingByArt(){
+    if(window.__whInc)return window.__whInc;
+    var m={},IN=D.incoming||[],today=D.dataAsOf||'';
+    IN.forEach(function(x){if(!x.art)return;var e=m[x.art]||(m[x.art]={qty:0,eta:null});e.qty+=x.qty||0;
+      if(x.eta&&(!e.eta||x.eta<e.eta))e.eta=x.eta;});
+    window.__whInc=m;return m;
+  }
+  function whHead(){return '<div class="page-head"><div><h1>Склады и логистика</h1><div class="page-sub">Остатки по складам, поставки из Китая (в пути) и дефицит с оценкой потерь. Данные на '+esc(D.dataAsOfHuman||'')+'.</div></div></div>';}
+  function whSubnav(tab){var T=[['stock','Остатки по складам'],['incoming','Ожидается из Китая'],['deficit','Дефицит и потери']];
+    return '<div class="wh-sub">'+T.map(function(x){return '<button class="'+(tab===x[0]?'on':'')+'" onclick="whGoTab(\''+x[0]+'\')">'+x[1]+'</button>';}).join('')+'</div>';}
+  function whStyle(){return '<style>'
+    +'.wh-sub{display:flex;gap:6px;margin:4px 0 16px;border-bottom:1px solid var(--line)}.wh-sub button{border:0;background:none;padding:10px 18px;font:700 14px Montserrat,sans-serif;color:#86888D;cursor:pointer}.wh-sub button.on{color:#23242A;border-bottom:3px solid #FDCF08;margin-bottom:-1px}'
+    +'.wh-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}'
+    +'.wh-kpi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;position:relative;overflow:hidden}'
+    +'.wh-kpi.g:before{content:"";position:absolute;inset:0;background-image:linear-gradient(218deg,rgba(253,207,8,.22) 0%,rgba(255,122,0,.15) 16%,rgba(199,0,31,.08) 32%,rgba(255,255,255,0) 62%);pointer-events:none}'
+    +'.wh-kpi .l{font-size:11.5px;color:#86888D;position:relative}.wh-kpi .v{font-family:Unbounded,sans-serif;font-weight:800;font-size:23px;margin-top:6px;position:relative}.wh-kpi .s{font-size:11px;color:#86888D;margin-top:3px;position:relative}'
+    +'.wh-kpi.od{border-color:#F3C9CF;background:#FFF6F7}.wh-kpi.od .v{color:#C7001F}'
+    +'.wh-fl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}.wh-fg{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wh-fg>span{font-size:11px;color:#86888D;text-transform:uppercase;letter-spacing:.04em;font-weight:700}'
+    +'.wh-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font:600 12.5px Montserrat,sans-serif;color:#3a3c42;cursor:pointer}.wh-chip.on{background:#23252B;color:#fff;border-color:#23252B}.wh-chip b{font-weight:800;margin-left:4px;opacity:.8}'
+    +'.wh-srch{flex:1;min-width:200px;border:1px solid var(--line);background:#FBFBF9;border-radius:999px;padding:9px 15px;font:inherit;font-size:13px;color:#23242A}'
+    +'.wh-tbl td small{display:block;font-size:11px;color:#8b8d90;margin-top:2px}.wh-tbl td.c,.wh-tbl th.c{text-align:center;white-space:nowrap}.wh-tbl td.r,.wh-tbl th.r{text-align:right;white-space:nowrap}'
+    +'.wh-st{font-size:11.5px;font-weight:700;white-space:nowrap}.wh-st.tr{color:#C7001F}.wh-st.pr{color:#8a6a00}'
+    +'.wh-sb{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}.wh-sb.ok{background:#E7F5EF;color:#1F9E74}.wh-sb.short{background:#FFF1CC;color:#8a6500}.wh-sb.dead{background:#EEECE7;color:#6b6e72}.wh-sb.slow{background:#EAF0FB;color:#3a5c93}.wh-sb.crit{background:#FBE7EA;color:#C7001F}.wh-sb.go{background:#FFF3E9;color:#8a4b1e}'
+    +'.wh-more{display:block;margin:14px auto 0;border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 24px;font-weight:600;font-size:13px;cursor:pointer}'
+    +'</style>';}
+
   function warehousesPage(){
-    var IN=(D.incoming||[]).slice();
-    var st=state.whF||(state.whF={status:'',dest:'',q:''});
-    var num=function(n){return (Math.round(n)||0).toLocaleString('ru-RU');};
+    var tab=state.whTab||'stock';
+    var body=(tab==='incoming')?whIncomingBlock():(tab==='deficit')?whDeficitBlock():whStockBlock();
+    return whStyle()+whHead()+whSubnav(tab)+body;
+  }
+
+  function whIncomingBlock(){
+    var IN=(D.incoming||[]).slice();var st=state.whF||(state.whF={status:'',dest:'',q:''});
     var qsum=function(a){return a.reduce(function(s,x){return s+(x.qty||0);},0);};
-    var inTransit=IN.filter(function(x){return x.status==='В пути';});
-    var inProd=IN.filter(function(x){return x.status==='В производстве';});
-    var today=D.dataAsOf||'';
-    var etas=IN.filter(function(x){return x.eta;}).map(function(x){return x.eta;}).sort();
-    var futEtas=etas.filter(function(e){return e>=today;});
-    var nextEta=futEtas.length?futEtas[0]:(etas.length?etas[etas.length-1]:null);
-    var overdue=IN.filter(function(x){return x.eta&&x.eta<today;});
-    var DESTS=['Москва','Владивосток','Новосибирск','СЕТИ','Прочее'];
-    // фильтрация
-    var rows=IN.filter(function(x){
-      if(st.status&&x.status!==st.status)return false;
-      if(st.dest&&x.dest!==st.dest)return false;
-      var q=(st.q||'').toLowerCase();if(q&&((x.name||'')+' '+(x.art||'')).toLowerCase().indexOf(q)<0)return false;
-      return true;});
+    var inTransit=IN.filter(function(x){return x.status==='В пути';}),inProd=IN.filter(function(x){return x.status==='В производстве';});
+    var today=D.dataAsOf||'';var etas=IN.filter(function(x){return x.eta;}).map(function(x){return x.eta;}).sort();
+    var futEtas=etas.filter(function(e){return e>=today;});var nextEta=futEtas.length?futEtas[0]:(etas.length?etas[etas.length-1]:null);
+    var overdue=IN.filter(function(x){return x.eta&&x.eta<today;});var DESTS=['Москва','Владивосток','Новосибирск','СЕТИ','Прочее'];
+    var rows=IN.filter(function(x){if(st.status&&x.status!==st.status)return false;if(st.dest&&x.dest!==st.dest)return false;
+      var q=(st.q||'').toLowerCase();if(q&&((x.name||'')+' '+(x.art||'')).toLowerCase().indexOf(q)<0)return false;return true;});
     rows.sort(function(a,b){return (a.eta||'9999').localeCompare(b.eta||'9999')||(b.qty-a.qty);});
     var lim=state.whLimit||40,shown=rows.slice(0,lim);
-    // шапка
-    var head='<div class="page-head"><div><h1>Склады и логистика</h1><div class="page-sub">Заказы поставщику в пути и в производстве (из Китая): что, сколько и когда поступит — по складам назначения. Данные на '+esc(D.dataAsOfHuman||'')+'.</div></div></div>';
-    // KPI
     function sc(l,v,s,grad){return '<div class="wh-kpi'+(grad?' g':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
     var kpis='<div class="wh-kpis"'+(overdue.length?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
-      +sc('В пути',inTransit.length+' поз.',num(qsum(inTransit))+' шт',1)
-      +sc('В производстве',inProd.length+' поз.',num(qsum(inProd))+' шт')
+      +sc('В пути',inTransit.length+' поз.',whNum(qsum(inTransit))+' шт',1)+sc('В производстве',inProd.length+' поз.',whNum(qsum(inProd))+' шт')
       +sc('Ближайшее поступление',whDate(nextEta),'ожидаемая дата')
       +(overdue.length?'<div class="wh-kpi od"><div class="l">Просрочено</div><div class="v">'+overdue.length+' поз.</div><div class="s">плановая дата прошла</div></div>':'')
-      +sc('Всего ожидается',IN.length+' поз.',num(qsum(IN))+' шт')+'</div>';
-    // фильтры
+      +sc('Всего ожидается',IN.length+' поз.',whNum(qsum(IN))+' шт')+'</div>';
     function chip(k,v,l){return '<button class="wh-chip'+((st[k]||'')===v?' on':'')+'" onclick="setWhF(\''+k+'\',\''+v+'\')">'+l+'</button>';}
     var destChips=DESTS.map(function(d){var n=IN.filter(function(x){return x.dest===d;}).length;return n?chip('dest',d,esc(d)+' <b>'+n+'</b>'):'';}).join('');
     var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Статус</span>'+chip('status','В пути','В пути')+chip('status','В производстве','В производстве')+'</div>'
-      +'<div class="wh-fg"><span>Склад</span>'+destChips+'</div>'
-      +'<input id="whSearch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSearch(this.value)"></div>';
-    // таблица
-    var body=shown.map(function(x){
-      var stc=x.status==='В пути'?'<span class="wh-st tr">● В пути</span>':'<span class="wh-st pr">● В производстве</span>';
-      return '<tr><td><b>'+esc(x.name)+'</b><small>'+(x.art?('Арт. '+esc(x.art)+' · '):'')+esc(x.cat||'')+'</small></td>'
-        +'<td>'+esc(x.brand||'')+'</td><td class="num">'+num(x.qty)+'</td><td>'+stc+'</td><td>'+esc(x.dest||'')+'</td>'
-        +'<td class="c">'+(x.order?esc(x.order):'<span class="mu">—</span>')+'</td>'
-        +'<td class="c">'+whDate(x.port)+'</td><td class="c">'+whDate(x.ktk)+'</td><td class="c"><b>'+whDate(x.eta)+'</b></td></tr>';}).join('');
+      +'<div class="wh-fg"><span>Склад</span>'+destChips+'</div><input id="whSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSearch(this.value)"></div>';
+    var tb=shown.map(function(x){var stc=x.status==='В пути'?'<span class="wh-st tr">● В пути</span>':'<span class="wh-st pr">● В производстве</span>';
+      return '<tr><td><b>'+esc(x.name)+'</b><small>'+(x.art?('Арт. '+esc(x.art)+' · '):'')+esc(x.cat||'')+'</small></td><td>'+esc(x.brand||'')+'</td><td class="r">'+whNum(x.qty)+'</td><td>'+stc+'</td><td>'+esc(x.dest||'')+'</td><td class="c">'+(x.order?esc(x.order):'<span class="mu">—</span>')+'</td><td class="c">'+whDate(x.port)+'</td><td class="c">'+whDate(x.ktk)+'</td><td class="c"><b>'+whDate(x.eta)+'</b></td></tr>';}).join('');
     var tbl='<section class="card pad"><div class="card-title">Ожидается из Китая '+dataTag('source')+'<span class="right">'+rows.length+' позиций'+(st.status||st.dest||st.q?' · отфильтровано':'')+'</span></div>'
-      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">Источник — отчёт слежения (заказы поставщику). «В производстве» — ещё изготавливается; «В пути» — отгружено, с датами прихода в порт → на станцию → поступления. Даты плановые.</div>'
-      +'<div class="table-wrap" style="max-height:620px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th><th class="num">Кол-во, шт</th><th>Статус</th><th>Склад</th><th class="c">Заказ от</th><th class="c">Приход в порт</th><th class="c">На станцию</th><th class="c">Поступление</th></tr></thead><tbody>'
-      +(body||'<tr><td colspan="9" class="empty">ничего не найдено под фильтр</td></tr>')+'</tbody></table></div>'
-      +(rows.length>lim?'<button class="mg-more" onclick="whMore()" style="display:block;margin:14px auto 0;border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 24px;font-weight:600;font-size:13px;cursor:pointer">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
-    return '<style>'
-      +'.wh-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}'
-      +'.wh-kpi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;position:relative;overflow:hidden}'
-      +'.wh-kpi.g:before{content:"";position:absolute;inset:0;background-image:linear-gradient(218deg,rgba(253,207,8,.22) 0%,rgba(255,122,0,.15) 16%,rgba(199,0,31,.08) 32%,rgba(255,255,255,0) 62%);pointer-events:none}'
-      +'.wh-kpi .l{font-size:11.5px;color:#86888D;position:relative}.wh-kpi .v{font-family:Unbounded,sans-serif;font-weight:800;font-size:23px;margin-top:6px;position:relative}.wh-kpi .s{font-size:11px;color:#86888D;margin-top:3px;position:relative}'
-      +'.wh-kpi.od{border-color:#F3C9CF;background:#FFF6F7}.wh-kpi.od .v{color:#C7001F}'
-      +'.wh-fl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}.wh-fg{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wh-fg>span{font-size:11px;color:#86888D;text-transform:uppercase;letter-spacing:.04em;font-weight:700}'
-      +'.wh-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font:600 12.5px Montserrat,sans-serif;color:#3a3c42;cursor:pointer}.wh-chip.on{background:#23252B;color:#fff;border-color:#23252B}.wh-chip b{font-weight:800;margin-left:4px;opacity:.8}'
-      +'#whSearch{flex:1;min-width:200px;border:1px solid var(--line);background:#FBFBF9;border-radius:999px;padding:9px 15px;font:inherit;font-size:13px;color:#23242A}'
-      +'.wh-tbl td small{display:block;font-size:11px;color:#8b8d90;margin-top:2px}.wh-tbl td.c,.wh-tbl th.c{text-align:center;white-space:nowrap}'
-      +'.wh-st{font-size:11.5px;font-weight:700;white-space:nowrap}.wh-st.tr{color:#C7001F}.wh-st.pr{color:#8a6a00}'
-      +'</style>'+head+kpis+fil+tbl;
+      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«В производстве» — ещё изготавливается; «В пути» — отгружено, с датами прихода в порт → на станцию → поступления. Даты плановые.</div>'
+      +'<div class="table-wrap" style="max-height:620px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th><th class="r">Кол-во, шт</th><th>Статус</th><th>Склад</th><th class="c">Заказ от</th><th class="c">Приход в порт</th><th class="c">На станцию</th><th class="c">Поступление</th></tr></thead><tbody>'
+      +(tb||'<tr><td colspan="9" class="empty">ничего не найдено под фильтр</td></tr>')+'</tbody></table></div>'
+      +(rows.length>lim?'<button class="wh-more" onclick="whMore()">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
+    return kpis+fil+tbl;
+  }
+
+  function whStockBlock(){
+    var T=D.turnover||{};var st=state.whS||(state.whS={wh:'',status:'',q:''});
+    var ORDER=['Лакония ОПТ','Лакония СЕТИ','Владивосток','Новосибирск','Москва','Лакония прочее','Прочее'];
+    var present={};Object.keys(T).forEach(function(a){Object.keys(T[a].wh||{}).forEach(function(w){present[w]=1;});});
+    var WHS=ORDER.filter(function(w){return present[w];});
+    var arts=Object.keys(T);
+    var inc=whIncomingByArt();
+    var SL={ok:'в наличии',short:'мало',slow:'избыток',dead:'без движения'};
+    var rows=arts.map(function(a){var s=T[a];var qty=st.wh?((s.wh||{})[st.wh]||0):(s.company_in_stock||0);
+      return {art:a,name:s.name,brand:(D.txSkus.find?null:null),qty:qty,tot:s.company_in_stock||0,sold:s.sold||0,dos:s.dos,status:s.status,wh:s.wh||{},edet:!!inc[a]};});
+    // бренд по артикулу из txSkus
+    var artBr={};(D.txSkus||[]).forEach(function(s){artBr[s[0]]=s[3];});
+    rows.forEach(function(r){r.brand=artBr[r.art]||'';});
+    rows=rows.filter(function(r){
+      if(st.wh&&!(r.qty>0))return false;
+      if(st.status&&r.status!==st.status)return false;
+      var q=(st.q||'').toLowerCase();if(q&&((r.name||'')+' '+r.art).toLowerCase().indexOf(q)<0)return false;return true;});
+    rows.sort(function(a,b){return (b.qty-a.qty);});
+    var lim=state.whSLim||60,shown=rows.slice(0,lim);
+    // KPI
+    var totUnits=arts.reduce(function(s,a){return s+(T[a].company_in_stock||0);},0);
+    var shortN=arts.filter(function(a){return T[a].status==='short';}).length;
+    var deadN=arts.filter(function(a){return T[a].status==='dead';}).length;
+    function sc(l,v,s,g,od){return '<div class="wh-kpi'+(g?' g':'')+(od?' od':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
+    var kpis='<div class="wh-kpis">'+sc('Позиций в наличии',arts.length,'артикулов с остатком',1)
+      +sc('Всего на складах',whNum(totUnits)+' шт','суммарный остаток')
+      +sc('Мало (запас <30 дн)',shortN+' поз.','риск дефицита',0,shortN>0)
+      +sc('Без движения',deadN+' поз.','нет продаж за 90 дн')+'</div>';
+    // фильтры: склад + статус + поиск
+    function wchip(v,l,n){return '<button class="wh-chip'+((st.wh||'')===v?' on':'')+'" onclick="whSSet(\'wh\',\''+whQ(v)+'\')">'+l+(n!=null?' <b>'+n+'</b>':'')+'</button>';}
+    var whChips=wchip('','Все склады',null)+WHS.map(function(w){var n=arts.filter(function(a){return (T[a].wh||{})[w]>0;}).length;return wchip(w,esc(w),n);}).join('');
+    function schip(v,l){return '<button class="wh-chip'+((st.status||'')===v?' on':'')+'" onclick="whSSet(\'status\',\''+v+'\')">'+l+'</button>';}
+    var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Склад</span>'+whChips+'</div>'
+      +'<div class="wh-fg"><span>Статус</span>'+schip('short','Мало')+schip('dead','Без движения')+schip('slow','Избыток')+'</div>'
+      +'<input id="whSSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSSearch(this.value)"></div>';
+    // колонки: при «Все» — разбивка по складам; при выбранном — остаток на складе
+    var cols=st.wh?('<th class="r">Остаток, шт</th>'):(WHS.map(function(w){return '<th class="r">'+esc(w.replace('Лакония ','Лак.'))+'</th>';}).join('')+'<th class="r">Всего</th>');
+    var tb=shown.map(function(r){
+      var qcells=st.wh?('<td class="r"><b>'+whNum(r.qty)+'</b></td>'):(WHS.map(function(w){var v=(r.wh[w]||0);return '<td class="r">'+(v?whNum(v):'<span class="mu">·</span>')+'</td>';}).join('')+'<td class="r"><b>'+whNum(r.tot)+'</b></td>');
+      var sb='<span class="wh-sb '+(r.status||'ok')+'">'+(SL[r.status]||'—')+'</span>';
+      return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+'</small></td><td>'+esc(r.brand)+'</td>'+qcells
+        +'<td class="r">'+whNum(r.sold)+'</td><td class="r">'+(r.dos==null?'<span class="mu">—</span>':whNum(r.dos)+' дн')+'</td><td>'+sb+(r.edet?' <span class="wh-sb go">едет</span>':'')+'</td></tr>';}).join('');
+    var tbl='<section class="card pad"><div class="card-title">Остатки по складам '+dataTag('source')+'<span class="right">'+rows.length+' позиций'+(st.wh?(' · '+esc(st.wh)):'')+'</span></div>'
+      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«Продано» — за 90 дней; «Запас» — на сколько дней хватит при текущем темпе; «мало» — меньше 30 дней. «Едет» — есть поставка в пути.</div>'
+      +'<div class="table-wrap" style="max-height:640px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th>'+cols+'<th class="r">Продано 90д</th><th class="r">Запас</th><th>Статус</th></tr></thead><tbody>'
+      +(tb||'<tr><td colspan="12" class="empty">ничего не найдено под фильтр</td></tr>')+'</tbody></table></div>'
+      +(rows.length>lim?'<button class="wh-more" onclick="whSMore()">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
+    return kpis+fil+tbl;
+  }
+
+  function whDeficitBlock(){
+    var T=D.turnover||{};var agg=whSkuAgg();var inc=whIncomingByArt();var st=state.whD||(state.whD={edet:'',q:''});
+    var artBr={},artName={},artCat={};(D.txSkus||[]).forEach(function(s,i){artBr[s[0]]=s[3];artName[s[0]]=s[1];artCat[s[0]]=(D.txCats||[])[s[2]]||'';});
+    // кандидаты: по всем SKU из продаж — остаток, продажи тек/прошл год, едет?
+    var seen={},cand=[];
+    (D.txSkus||[]).forEach(function(s,si){var art=s[0];if(!art||seen[art])return;seen[art]=1;
+      var tv=T[art]||{};var stock=tv.company_in_stock||0;var status=tv.status||(stock>0?'ok':'dead');
+      var cur=agg.cur[si]||[0,0],prev=agg.prev[si]||[0,0];
+      var isOOS=stock<=0,isLow=(status==='short');
+      if(!(isOOS||isLow))return;
+      var e=inc[art];
+      cand.push({art:art,name:s[1],brand:s[3],cat:(D.txCats||[])[s[2]]||'',stock:stock,status:status,
+        curQ:cur[0],curN:cur[1],prevQ:prev[0],prevN:prev[1],edet:!!e,eqty:e?e.qty:0,eta:e?e.eta:null,oos:isOOS});});
+    // фильтры
+    var rows=cand.filter(function(r){
+      if(st.edet==='no'&&r.edet)return false;if(st.edet==='yes'&&!r.edet)return false;
+      if(st.edet==='oos'&&!r.oos)return false;
+      var q=(st.q||'').toLowerCase();if(q&&((r.name||'')+' '+r.art).toLowerCase().indexOf(q)<0)return false;return true;});
+    rows.sort(function(a,b){return (b.prevN-a.prevN)||(b.prevQ-a.prevQ);});
+    var lim=state.whDLim||40,shown=rows.slice(0,lim);
+    // KPI: суммарная оценка потери (прошлогодняя выручка по позициям без наличия, не едут)
+    var oos=cand.filter(function(r){return r.oos;}),oosNoGo=oos.filter(function(r){return !r.edet;});
+    var lossAll=oos.reduce(function(s,r){return s+Math.max(0,r.prevN);},0);
+    var lossNoGo=oosNoGo.reduce(function(s,r){return s+Math.max(0,r.prevN);},0);
+    function sc(l,v,s,od){return '<div class="wh-kpi'+(od?' od':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
+    var kpis='<div class="wh-kpis">'+sc('Нет в наличии',oos.length+' поз.','из них едут: '+(oos.length-oosNoGo.length))
+      +sc('Нет и не едет',oosNoGo.length+' поз.','критично',1)
+      +sc('Потенц. потеря',fmtMoney(lossAll),'продажи этих позиций за тот же период 2025')
+      +sc('Потеря без поставки',fmtMoney(lossNoGo),'по тем, что не едут',lossNoGo>0)+'</div>';
+    function dchip(v,l){return '<button class="wh-chip'+((st.edet||'')===v?' on':'')+'" onclick="whDSet(\'edet\',\''+v+'\')">'+l+'</button>';}
+    var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Фильтр</span>'+dchip('oos','Только «нет в наличии»')+dchip('no','Не едут')+dchip('yes','Едут')+'</div>'
+      +'<input id="whDSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whDSearch(this.value)"></div>';
+    var tb=shown.map(function(r){
+      var flag=r.oos?(r.edet?'<span class="wh-sb go">нет · едет к '+whDate(r.eta)+'</span>':'<span class="wh-sb crit">нет · не едет</span>'):'<span class="wh-sb short">мало</span>';
+      return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+esc(r.brand||'')+'</td>'
+        +'<td class="r">'+(r.stock>0?whNum(r.stock):'<b style="color:#C7001F">0</b>')+'</td>'
+        +'<td class="r">'+whNum(r.curQ)+'</td><td class="r">'+whNum(r.prevQ)+'</td>'
+        +'<td class="r">'+(r.edet?whNum(r.eqty)+' шт':'<span class="mu">—</span>')+'</td>'
+        +'<td class="r"><b>'+fmtMoney(Math.max(0,r.prevN))+'</b></td><td>'+flag+'</td></tr>';}).join('');
+    var tbl='<section class="card pad"><div class="card-title">Дефицит и потенциальные потери '+dataTag('source')+'<span class="right">'+rows.length+' позиций</span></div>'
+      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">Позиции без наличия или с малым запасом. «Потенц. потеря» — сколько этой позиции продали за <b>тот же период прошлого года</b>: если сейчас нет и не едет — это риск упустить выручку. Сортировка по размеру потери.</div>'
+      +'<div class="table-wrap" style="max-height:640px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th><th class="r">Остаток</th><th class="r">Продано 2026</th><th class="r">Продано 2025*</th><th class="r">В пути</th><th class="r">Потенц. потеря</th><th>Статус</th></tr></thead><tbody>'
+      +(tb||'<tr><td colspan="8" class="empty">нет позиций под фильтр</td></tr>')+'</tbody></table></div>'
+      +'<div style="font-size:11px;color:#9a9c9f;margin-top:8px">* тот же период прошлого года (к дате актуальности).</div>'
+      +(rows.length>lim?'<button class="wh-more" onclick="whDMore()">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
+    return kpis+fil+tbl;
   }
   function stubPage(title,iconKey,badge,text){
     var svg=(iconKey==='stock')
