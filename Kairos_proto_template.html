@@ -3302,7 +3302,12 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       if(sf.group.length&&sf.group.indexOf(grpOf(sk))<0)return false;
       if(sf.sub.length&&sf.sub.indexOf(subOf(sk))<0)return false;
       if(sf.product.length&&sf.product.indexOf(prodOf(sk))<0)return false;
+      if(_exclSmart&&_isSmart(sk))return false;   // KRONbuild Smart — только СЕТИ/вся компания; в ОПТ-срезе не считается
       return true;}
+    // KRONbuild Smart — линейка только для СЕТЕЙ. Если в срез не попадают СЕТИ (т.е. срез по ОПТ: Москва/Владивосток/регион/город/менеджер) — Smart исключаем из всего среза.
+    function _isSmart(sk){var s=D.txSkus[sk];return !!(s&&s[3]==='KRONbuild'&&/smart/i.test(s[1]||''));}
+    var _setiScope=false;for(var _sn in CC){if(CC[_sn]!=='СЕТИ')continue;if(inSel(sf.filial,'Сети')&&inSel(sf.okrug,CR[_sn])&&inSel(sf.city,CT[_sn])&&inSel(sf.manager,CM[_sn])&&inSel(sf.client,_sn)){_setiScope=true;break;}}
+    var _exclSmart=!_setiScope;
     function cliGeoPass(cn){return inSel(sf.client,cn)&&inSel(sf.filial,fil3(cn))&&inSel(sf.okrug,CR[cn])&&inSel(sf.subject,SUBJ[cn])&&inSel(sf.city,CT[cn])&&inSel(sf.manager,CM[cn]);}
     var _fM=Math.floor((lo%10000)/100)||1,_lM=Math.floor((hi%10000)/100)||12,_lastData=_fM;for(var _m=12;_m>=_fM;_m--){var _kk=''+yr+(_m<10?'0'+_m:_m);if(D.ym&&D.ym[_kk]){_lastData=_m;break;}}var _effM=Math.min(_lM,_lastData);var _pl=(yr-1)*10000+_fM*100+1,_ph=prevEndFor(yr,_effM);
     var sales=0,qty=0,ord={},cl={},byM={},byMp={},byDim={},byCityN={},byCityP={},byCityCl={},okP={},okCl={},byMBrP={},okBrP={},byBrCityP={},byCli={},byCliP={},byBrCity={},byBrCl={},bySku={},okS={},bcs={},byBr={HeadRock:0,KRONbuild:0,ENKI:0},byMBr={},okBr={},mgS={},mgBr={},mgOk={},mgCl={},bySkuPrev={},byCat={},ps=0,pq=0,pcl={},por={};

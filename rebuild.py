@@ -1136,17 +1136,30 @@ if __name__=='__main__':
     print("Собираю модель…")
     KRS=build_krs(S,stock,plan,crm,price)
     KRS['incoming']=load_tracking(price)
-    # таксономия товаров: артикул -> [группа, подгруппа] (подгруппа = категория прайса)
-    _tax={}; _tree={}
+    # таксономия товаров: артикул -> [группа, подгруппа]
+    # подгруппа = категория прайса; если артикула нет в прайсе — берём категорию товара из модели (txCats),
+    # чтобы продаваемые позиции вне прайса (напр. KRONbuild Smart) не падали в «Прочее».
+    _priceCat={}
     for _k,_v in price.items():
         if _k=='__art_price__' or not isinstance(_v,tuple): continue
-        _art,_nm,_br,_c=_v
-        if not _art: continue
-        _g=group_of(_c,_br); _s=_c or '—'
+        if _v[0]: _priceCat[_v[0]]=_v[3]
+    _tax={}; _tree={}
+    _txc=KRS.get('txCats',[]); _nopr=0
+    for _sk in KRS.get('txSkus',[]):
+        _art=_sk[0] if _sk else None
+        if not _art or _art=='—': continue
+        _br=_sk[3] or 'HeadRock'; _catM=_txc[_sk[2]] if (_sk[2] is not None and _sk[2]<len(_txc)) else ''
+        _raw=_priceCat.get(_art) or _catM or ''
+        if _art not in _priceCat: _nopr+=1
+        _g=group_of(_raw,_br)
+        if _g=='Прочее':                       # нет категории — пробуем по названию (шуруп/дюбель→Крепёж и т.п.)
+            _g2=group_of(_sk[1] or '',_br)
+            if _g2!='Прочее': _g=_g2
+        _s=_raw or '—'
         _tax[_art]=[_g,_s]; _tree.setdefault(_g,{})[_s]=1
     KRS['tax']=_tax
     KRS['groupTree']={_g:sorted(_tree[_g].keys()) for _g in _tree}
-    print('  таксономия: групп %d, подгрупп %d, артикулов %d'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax)))
+    print('  таксономия: групп %d, подгрупп %d, артикулов %d (вне прайса по категории: %d)'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax),_nopr))
     ov=KRS['overview']
     print(f"  overview {CUR_YEAR}: продажи {ov['sales']:,} ₽ | план YTD {ov['planYTD']:,} | "
           f"выполн {ov['planDone']}% | АППГ {ov['growth']}% (к тем же мес. {CUR_YEAR-1})")
