@@ -151,6 +151,35 @@ def is_posm(name):
 def cat_art(name, price):
     m=price.get(nrm(name)); return (m[3],m[0]) if m else (None,None)
 
+def group_of(cat, brand):
+    """Товарная группа (верхний уровень) по категории прайса. Подгруппа = сама категория прайса.
+    HeadRock — 12 групп; KRON/ENKI — 6 групп; пистолеты (подбренд HeadRock) → «Отделка и нанесение»."""
+    s=(cat or '').lower()
+    if brand in ('KRONbuild','ENKI'):
+        if s.startswith('пистолет'): return 'Отделка и нанесение'
+        if 'уплотнит' in s: return 'Уплотнители'
+        if 'гермет' in s: return 'Герметики'
+        if 'пен' in s: return 'Монтажные пены'
+        if 'жидкие гвозди' in s or 'кле' in s: return 'Клеи'
+        if 'эмал' in s or 'грунт' in s or 'краск' in s or 'лак' in s: return 'ЛКМ'
+        if 'шуруп' in s or 'дюбел' in s or 'анкер' in s or 'саморез' in s: return 'Крепёж'
+        return 'Прочее'
+    # HeadRock
+    if 'коронк' in s or 'кольцевых пил' in s or 'балеринк' in s: return 'Коронки'
+    if 'пика sds' in s or 'зубило' in s: return 'Пики и зубила (SDS)'
+    if 'бур по бетону' in s or 'сверло' in s or 'шнеков' in s or 'перов' in s or 'удлинитель для пер' in s or 'конфирмат' in s or 'борфрез' in s: return 'Буры и свёрла'
+    if 'полотна' in s or 'цепь' in s or 'шина' in s or 'ножовк' in s or 'напильник' in s: return 'Полотна, цепи, ножовки'
+    if 'войлоч' in s or 'полировал' in s: return 'Абразив и полировка'
+    if 'диск' in s: return 'Диски'
+    if 'щетк' in s or 'щётк' in s or 'зачистн' in s or 'шарошек' in s: return 'Щётки и зачистка'
+    if 'шлифовал' in s or 'лепестков' in s or 'черепашк' in s or 'губки абразив' in s or 'насадка' in s or 'чаша алмазн' in s or 'быстрозажимная гайка' in s: return 'Абразив и полировка'
+    if 'биты' in s or 'ответок' in s or 'редуктор' in s or 'звёздоч' in s or 'шестигранник' in s or 'трещотк' in s or 'патрон' in s: return 'Биты и головки'
+    if 'шпател' in s or 'гладилк' in s or 'ручка телескоп' in s or 'скребок' in s or 'пистолет' in s or 'маркер' in s or 'карандаш' in s: return 'Отделка и нанесение'
+    if 'рулетк' in s or 'уровни' in s or 'штангенциркул' in s or 'отбивочн' in s: return 'Измерение и разметка'
+    if 'стяжки кабельн' in s or 'лески' in s or 'стержни клеев' in s: return 'Расходники'
+    if any(w in s for w in ['струбцин','стяжные ремн','пассатижи','тонкогубц','бокорез','клещи','ключ','нож','лезви','степлер','скобы','горелк','крюк']): return 'Ручной инструмент'
+    return 'Прочее'
+
 def group_cat(cat, brand, name=None):
     """Укрупняем категории KRON/ENKI в верхние группы (по прайс-категории, а если её нет — по названию); HeadRock — по прайсу как есть."""
     def _infer(t):
@@ -1107,6 +1136,17 @@ if __name__=='__main__':
     print("Собираю модель…")
     KRS=build_krs(S,stock,plan,crm,price)
     KRS['incoming']=load_tracking(price)
+    # таксономия товаров: артикул -> [группа, подгруппа] (подгруппа = категория прайса)
+    _tax={}; _tree={}
+    for _k,_v in price.items():
+        if _k=='__art_price__' or not isinstance(_v,tuple): continue
+        _art,_nm,_br,_c=_v
+        if not _art: continue
+        _g=group_of(_c,_br); _s=_c or '—'
+        _tax[_art]=[_g,_s]; _tree.setdefault(_g,{})[_s]=1
+    KRS['tax']=_tax
+    KRS['groupTree']={_g:sorted(_tree[_g].keys()) for _g in _tree}
+    print('  таксономия: групп %d, подгрупп %d, артикулов %d'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax)))
     ov=KRS['overview']
     print(f"  overview {CUR_YEAR}: продажи {ov['sales']:,} ₽ | план YTD {ov['planYTD']:,} | "
           f"выполн {ov['planDone']}% | АППГ {ov['growth']}% (к тем же мес. {CUR_YEAR-1})")
