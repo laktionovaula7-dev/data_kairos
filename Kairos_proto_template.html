@@ -3384,8 +3384,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var _GRPN=CATLIST.length;
     var bar='<div class="sf-head">'+periodField+'<div class="sf-head-sp"></div><button class="sf-toggle'+(_panelOpen?' on':'')+'" onclick="toggleSFPanel()">⚙ Фильтры'+((_fcount+(_advActive?1:0))?' <span class="fcnt">'+(_fcount+(_advActive?1:0))+'</span>':'')+'</button></div>'
       +(_panelOpen?('<div class="sf-panel"><div class="sf-panel-h"><b>Фильтры среза</b><span class="sf-panel-x" onclick="toggleSFPanel()">свернуть ✕</span></div><div class="sf-grid">'
-      +'<div class="sf-cap">Что продаём</div>'+msel('Бренд','brand',['HeadRock','KRONbuild','ENKI'],false)+msel('Группа','group',GROUPLIST,false)+msel('Подгруппа','sub',SUBLIST,false)+prodField()
       +'<div class="sf-cap">География</div>'+msel('Филиал','filial',FILIALS,false)+msel('Территория (ФО)','okrug',okrugs,regionDisabled)+msel('Регион / область','subject',subjects,regionDisabled)+msel('Город','city',cities,false)
+      +'<div class="sf-cap">Что продаём</div>'+msel('Бренд','brand',['HeadRock','KRONbuild','ENKI'],false)+msel('Группа','group',GROUPLIST,false)+msel('Подгруппа','sub',SUBLIST,false)+prodField()
       +'<div class="sf-cap">Кто</div>'+msel('Менеджер','manager',mgrs,false)+cliField()
       +'<div class="sf-cap">Как считаем</div>'+'<label class="sf-f"><span>Показатель</span><select class="adv-sel2" onchange="setSFMetric(this.value)">'+_opt('net','Продажи за вычетом возвратов, ₽',_metric)+_opt('gross','Продажи до возвратов, ₽',_metric)+_opt('returns','Возвраты, ₽',_metric)+_opt('qty','Количество, шт.',_metric)+'</select></label></div>'+_advHtml+'<div class="sf-panel-foot"><button class="sf-clearall" onclick="resetSF()">Сбросить</button></div></div>'):'');
     var chipsArr=[];[['filial',''],['okrug',''],['subject',''],['city','г. '],['manager','менеджер: '],['brand',''],['group','группа: '],['sub','подгр.: '],['cat1','кат.: '],['category','катег.: '],['product','товар: '],['client','']].forEach(function(kp){(sf[kp[0]]||[]).forEach(function(v){chipsArr.push([kp[0],v,kp[1]]);});});
@@ -4018,6 +4018,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
   window.toggleSF=function(k,v){var sf=state.sf||(state.sf={});if(!Array.isArray(sf[k]))sf[k]=[];var i=sf[k].indexOf(v);if(i>=0)sf[k].splice(i,1);else sf[k].push(v);state.sfOpen=k;if(window.render)render();};
   window.clearSF=function(k){var sf=state.sf||(state.sf={});sf[k]=[];state.sfOpen=k;if(window.render)render();};
   window.sfOpen=function(k){state.sfOpen=(state.sfOpen===k?null:k);if(window.render)render();};
+  if(!window.__sfOutside){window.__sfOutside=1;document.addEventListener('click',function(e){try{if(state&&state.sfOpen&&!(e.target.closest&&e.target.closest('.msel'))){state.sfOpen=null;if(window.render)render();}}catch(_){}},false);}
   window.toggleSFPanel=function(){state.sfPanelOpen=(state.sfPanelOpen===false);if(state.sfPanelOpen===false)state.sfOpen=null;if(window.render)render();};
   window.ovnGoClients=function(){state.mcf={sort:'s',limit:25};state.page='mc';state.mcTab='clients';state.client=null;state.mgrSel=null;if(window.render)render();if(window.scrollTo)scrollTo(0,0);};
   window.goAbc=function(){state.page='sales';state.salesTab='results';(state.svFold=state.svFold||{}).abc=true;state.svScroll='sv-abc';if(window.render)render();};
