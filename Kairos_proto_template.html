@@ -1245,6 +1245,8 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
   function whNum(n){return (Math.round(n)||0).toLocaleString('ru-RU');}
   function whQ(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
   window.whGoTab=function(t){state.whTab=t;if(window.render)render();if(window.scrollTo)scrollTo(0,0);};
+  window.whBrSet=function(v){state.whBr=(state.whBr===v?'':v);state.whLimit=state.whSLim=state.whDLim=null;if(window.render)render();};
+  function whBrandChips(){var cur=state.whBr||'';function c(v,l){return '<button class="wh-chip'+(cur===v?' on':'')+'" onclick="whBrSet(\''+v+'\')">'+l+'</button>';}return '<div class="wh-fg"><span>Бренд</span>'+c('','Все')+c('KRONbuild','KRONbuild')+c('ENKI','ENKI')+c('HeadRock','HeadRock')+'</div>';}
   window.setWhF=function(k,v){state.whF=state.whF||{status:'',dest:'',q:''};state.whF[k]=(state.whF[k]===v?'':v);state.whLimit=40;if(window.render)render();};
   window.whMore=function(){state.whLimit=(state.whLimit||40)+60;if(window.render)render();};
   window.whSearch=function(v){state.whF=state.whF||{status:'',dest:'',q:''};state.whF.q=v;state.whLimit=40;if(window.render)render();var n=document.getElementById('whSearch');if(n){n.focus();try{n.setSelectionRange(v.length,v.length)}catch(_){}}};
@@ -1300,6 +1302,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
 
   function whIncomingBlock(){
     var IN=(D.incoming||[]).slice();var st=state.whF||(state.whF={status:'',dest:'',q:''});
+    if(state.whBr)IN=IN.filter(function(x){return (x.brand||'')===state.whBr;});
     var qsum=function(a){return a.reduce(function(s,x){return s+(x.qty||0);},0);};
     var inTransit=IN.filter(function(x){return x.status==='В пути';}),inProd=IN.filter(function(x){return x.status==='В производстве';});
     var today=D.dataAsOf||'';var etas=IN.filter(function(x){return x.eta;}).map(function(x){return x.eta;}).sort();
@@ -1317,7 +1320,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
       +sc('Всего ожидается',IN.length+' поз.',whNum(qsum(IN))+' шт')+'</div>';
     function chip(k,v,l){return '<button class="wh-chip'+((st[k]||'')===v?' on':'')+'" onclick="setWhF(\''+k+'\',\''+v+'\')">'+l+'</button>';}
     var destChips=DESTS.map(function(d){var n=IN.filter(function(x){return x.dest===d;}).length;return n?chip('dest',d,esc(d)+' <b>'+n+'</b>'):'';}).join('');
-    var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Статус</span>'+chip('status','В пути','В пути')+chip('status','В производстве','В производстве')+'</div>'
+    var fil='<div class="card pad wh-fl">'+whBrandChips()+'<div class="wh-fg"><span>Статус</span>'+chip('status','В пути','В пути')+chip('status','В производстве','В производстве')+'</div>'
       +'<div class="wh-fg"><span>Склад</span>'+destChips+'</div><input id="whSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSearch(this.value)"></div>';
     var tb=shown.map(function(x){var stc=x.status==='В пути'?'<span class="wh-st tr">● В пути</span>':'<span class="wh-st pr">● В производстве</span>';
       return '<tr><td><b>'+esc(x.name)+'</b><small>'+(x.art?('Арт. '+esc(x.art)+' · '):'')+esc(x.cat||'')+'</small></td><td>'+esc(x.brand||'')+'</td><td class="r">'+whNum(x.qty)+'</td><td>'+stc+'</td><td>'+esc(x.dest||'')+'</td><td class="c">'+(x.order?esc(x.order):'<span class="mu">—</span>')+'</td><td class="c">'+whDate(x.port)+'</td><td class="c">'+whDate(x.ktk)+'</td><td class="c"><b>'+whDate(x.eta)+'</b></td></tr>';}).join('');
@@ -1334,14 +1337,12 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     var ORDER=['Лакония ОПТ','Лакония СЕТИ','Владивосток','Новосибирск','Москва','Лакония прочее','Прочее'];
     var present={};Object.keys(T).forEach(function(a){Object.keys(T[a].wh||{}).forEach(function(w){present[w]=1;});});
     var WHS=ORDER.filter(function(w){return present[w];});
-    var arts=Object.keys(T);
+    var artBr={};(D.txSkus||[]).forEach(function(s){artBr[s[0]]=s[3];});
+    var arts=Object.keys(T);if(state.whBr)arts=arts.filter(function(a){return (artBr[a]||'')===state.whBr;});
     var inc=whIncomingByArt();
     var SL={ok:'в наличии',short:'мало',slow:'избыток',dead:'без движения'};
     var rows=arts.map(function(a){var s=T[a];var qty=st.wh?((s.wh||{})[st.wh]||0):(s.company_in_stock||0);
-      return {art:a,name:s.name,brand:(D.txSkus.find?null:null),qty:qty,tot:s.company_in_stock||0,sold:s.sold||0,dos:s.dos,status:s.status,wh:s.wh||{},edet:!!inc[a]};});
-    // бренд по артикулу из txSkus
-    var artBr={};(D.txSkus||[]).forEach(function(s){artBr[s[0]]=s[3];});
-    rows.forEach(function(r){r.brand=artBr[r.art]||'';});
+      return {art:a,name:s.name,brand:artBr[a]||'',qty:qty,tot:s.company_in_stock||0,sold:s.sold||0,dos:s.dos,status:s.status,wh:s.wh||{},edet:!!inc[a]};});
     rows=rows.filter(function(r){
       if(st.wh&&!(r.qty>0))return false;
       if(st.status&&r.status!==st.status)return false;
@@ -1361,7 +1362,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     function wchip(v,l,n){return '<button class="wh-chip'+((st.wh||'')===v?' on':'')+'" onclick="whSSet(\'wh\',\''+whQ(v)+'\')">'+l+(n!=null?' <b>'+n+'</b>':'')+'</button>';}
     var whChips=wchip('','Все склады',null)+WHS.map(function(w){var n=arts.filter(function(a){return (T[a].wh||{})[w]>0;}).length;return wchip(w,esc(w),n);}).join('');
     function schip(v,l){return '<button class="wh-chip'+((st.status||'')===v?' on':'')+'" onclick="whSSet(\'status\',\''+v+'\')">'+l+'</button>';}
-    var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Склад</span>'+whChips+'</div>'
+    var fil='<div class="card pad wh-fl">'+whBrandChips()+'<div class="wh-fg"><span>Склад</span>'+whChips+'</div>'
       +'<div class="wh-fg"><span>Статус</span>'+schip('short','Мало')+schip('dead','Без движения')+schip('slow','Избыток')+'</div>'
       +'<input id="whSSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSSearch(this.value)"></div>';
     // колонки: при «Все» — разбивка по складам; при выбранном — остаток на складе
@@ -1385,6 +1386,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     // кандидаты: по всем SKU из продаж — остаток, продажи тек/прошл год, едет?
     var seen={},cand=[];
     (D.txSkus||[]).forEach(function(s,si){var art=s[0];if(!art||seen[art])return;seen[art]=1;
+      if(state.whBr&&(s[3]||'')!==state.whBr)return;
       var tv=T[art]||{};var stock=tv.company_in_stock||0;var status=tv.status||(stock>0?'ok':'dead');
       var cur=agg.cur[si]||[0,0],prev=agg.prev[si]||[0,0];
       var isOOS=stock<=0,isLow=(status==='short');
@@ -1409,7 +1411,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
       +sc('Потенц. потеря',fmtMoney(lossAll),'продажи этих позиций за тот же период 2025')
       +sc('Потеря без поставки',fmtMoney(lossNoGo),'по тем, что не едут',lossNoGo>0)+'</div>';
     function dchip(v,l){return '<button class="wh-chip'+((st.edet||'')===v?' on':'')+'" onclick="whDSet(\'edet\',\''+v+'\')">'+l+'</button>';}
-    var fil='<div class="card pad wh-fl"><div class="wh-fg"><span>Фильтр</span>'+dchip('oos','Только «нет в наличии»')+dchip('no','Не едут')+dchip('yes','Едут')+'</div>'
+    var fil='<div class="card pad wh-fl">'+whBrandChips()+'<div class="wh-fg"><span>Фильтр</span>'+dchip('oos','Только «нет в наличии»')+dchip('no','Не едут')+dchip('yes','Едут')+'</div>'
       +'<input id="whDSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whDSearch(this.value)"></div>';
     var tb=shown.map(function(r){
       var flag=r.oos?(r.edet?'<span class="wh-sb go">нет · едет к '+whDate(r.eta)+'</span>':'<span class="wh-sb crit">нет · не едет</span>'):'<span class="wh-sb short">мало</span>';
