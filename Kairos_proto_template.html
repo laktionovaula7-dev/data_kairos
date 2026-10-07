@@ -3349,7 +3349,16 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var _poptsB=[2026,2025,2024].map(_yoptB).join('');
     var periodField='<div class="sf-f sf-f-period"><span>Период</span>'+krsPeriodUI()+'</div>';
     var CATLIST=[];(function(){var seen={};for(var _ci=0;_ci<(D.txCats||[]).length;_ci++){var _cn=D.txCats[_ci];if(_cn&&_cn!=='Без категории'&&!seen[_cn]){seen[_cn]=1;CATLIST.push(_cn);}}CATLIST.sort(function(a,b){return a.localeCompare(b,'ru');});})();
-    var prodNames=[];(function(){var seen={};for(var _pi=0;_pi<(D.txSkus||[]).length;_pi++){var _pn=(D.txSkus[_pi]||['',''])[1];if(_pn&&!seen[_pn]){seen[_pn]=1;prodNames.push(_pn);}}prodNames.sort(function(a,b){return a.localeCompare(b,'ru');});})();
+    // товарный каскад: Бренд → Группа → Подгруппа → Товар (списки зависят от вышестоящего выбора)
+    var _selBr=sf.brand||[],_col=function(a,b){return a.localeCompare(b,'ru');};
+    function _skBrOk(br){return !_selBr.length||_selBr.indexOf(br||'HeadRock')>=0;}
+    var GROUPLIST=[],SUBLIST=[],prodNames=[];
+    (function(){var s={};for(var i=0;i<(D.txSkus||[]).length;i++){var x=D.txSkus[i];if(!_skBrOk(x[3]))continue;var g=grpOf(i);if(!s[g]){s[g]=1;GROUPLIST.push(g);}}GROUPLIST.sort(_col);})();
+    sf.group=sf.group.filter(function(x){return GROUPLIST.indexOf(x)>=0;});
+    (function(){var s={};for(var i=0;i<(D.txSkus||[]).length;i++){var x=D.txSkus[i];if(!_skBrOk(x[3]))continue;var g=grpOf(i);if(sf.group.length&&sf.group.indexOf(g)<0)continue;var sb=subOf(i);if(!s[sb]){s[sb]=1;SUBLIST.push(sb);}}SUBLIST.sort(_col);})();
+    sf.sub=sf.sub.filter(function(x){return SUBLIST.indexOf(x)>=0;});
+    (function(){var s={};for(var i=0;i<(D.txSkus||[]).length;i++){var x=D.txSkus[i];if(!_skBrOk(x[3]))continue;var g=grpOf(i);if(sf.group.length&&sf.group.indexOf(g)<0)continue;var sb=subOf(i);if(sf.sub.length&&sf.sub.indexOf(sb)<0)continue;var nm=x[1];if(nm&&!s[nm]){s[nm]=1;prodNames.push(nm);}}prodNames.sort(_col);})();
+    sf.product=sf.product.filter(function(x){return prodNames.indexOf(x)>=0;});
     function prodField(){var selv=sf.product||[];var op=(state.sfOpen==='product');var q=(state.sfProdQ||'').toLowerCase();
       var summ=selv.length?(selv.length===1?selv[0]:selv.length+' выбрано'):'— все —';
       var list=q?prodNames.filter(function(n){return n.toLowerCase().indexOf(q)>=0;}).slice(0,60):selv.concat(prodNames.filter(function(n){return selv.indexOf(n)<0;}).slice(0,40));
@@ -3373,8 +3382,6 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +'<label class="sf-f"><span>…от чего считать</span><select class="adv-sel2" onchange="setSFCliBasis(this.value)">'+_opt('all','всего ассортимента',_cliBasis)+_opt('group','выбранной группы / среза',_cliBasis)+'</select></label>'
       +'</div></div>';
     var _GRPN=CATLIST.length;
-    var GROUPLIST=Object.keys(D.groupTree||{}).sort(function(a,b){return a.localeCompare(b,'ru');});
-    var SUBLIST=[];(function(){var seen={},tr=D.groupTree||{};Object.keys(tr).forEach(function(g){(tr[g]||[]).forEach(function(s){if(!seen[s]){seen[s]=1;SUBLIST.push(s);}});});SUBLIST.sort(function(a,b){return a.localeCompare(b,'ru');});})();
     var bar='<div class="sf-head">'+periodField+'<div class="sf-head-sp"></div><button class="sf-toggle'+(_panelOpen?' on':'')+'" onclick="toggleSFPanel()">⚙ Фильтры'+((_fcount+(_advActive?1:0))?' <span class="fcnt">'+(_fcount+(_advActive?1:0))+'</span>':'')+'</button></div>'
       +(_panelOpen?('<div class="sf-panel"><div class="sf-panel-h"><b>Фильтры среза</b><span class="sf-panel-x" onclick="toggleSFPanel()">свернуть ✕</span></div><div class="sf-grid">'
       +'<div class="sf-cap">Что продаём</div>'+msel('Бренд','brand',['HeadRock','KRONbuild','ENKI'],false)+msel('Группа','group',GROUPLIST,false)+msel('Подгруппа','sub',SUBLIST,false)+prodField()
