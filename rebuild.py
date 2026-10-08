@@ -1081,6 +1081,11 @@ def build_krs(S, stock, plan, crm, price):
     # Контур.Фокус: ИНН по клиенту (имя из 1С — только ключ к справочнику; далее всё по ИНН); _cinn/_kont уже загружены выше
     clientInn={cn:_cinn[nrm(cn)] for cn in S['client_net'] if nrm(cn) in _cinn}
     print(f"  Контур: ИНН сопоставлен {len(clientInn)} клиентам из {len(S['client_net'])}")
+    # транзакции исключённых клиентов (сотрудники из EXCLUDE_CLIENTS_RAW) не отдаём на фронт —
+    # иначе страница «Менеджеры и клиенты» (считает из tx) снова их показывает
+    _drop_ci={ix for ix,nm in enumerate(S['tx_clients']) if _cnorm(nm) in _exc}
+    _tx_out=[t for t in S['tx'] if t[1] not in _drop_ci] if _drop_ci else S['tx']
+    if _drop_ci: print(f"  tx: убрано строк исключённых клиентов {len(S['tx'])-len(_tx_out)}")
     KRS={
       'meta':{'prototype':True,'note':f'Пересобрано rebuild.py из актуальных Excel. Вся компания, {CUR} (АППГ {PREV}).',
         'sourceCoverage':{'period':f'{CUR} (АППГ {PREV})','scope':'Вся компания / все бренды',
@@ -1097,7 +1102,7 @@ def build_krs(S, stock, plan, crm, price):
       'abcDetail':{'counts':{'A':len(A),'B':len(B),'C':len(C)},'revenue':{k:round(v) for k,v in rev_by.items()},
         'revenue_share':{k:round(v/(tot_rev or 1)*100,1) for k,v in rev_by.items()},'total_rev':round(tot_rev),
         'total_sku':len(catalog),'nclients':nclients,'a_list':a_list,'reserve':reserve},
-      'tx':S['tx'],'txClients':S['tx_clients'],'txCats':S['tx_cats'],'txSkus':S['tx_skus'],'catTotal':dict(cat_total),
+      'tx':_tx_out,'txClients':S['tx_clients'],'txCats':S['tx_cats'],'txSkus':S['tx_skus'],'catTotal':dict(cat_total),
       'ym':S['yearMonth'],'ymGross':S['ymGross'],'ymRet':S['ymRet'],'geoRef':load_geo(),'ruMap':load_rumap(),
       'regionsData':regionsData,'clientRegion':clientRegion,'foreignRegions':foreign or ['Беларусь'],
       'clientFilial':cFil,'clientChannel':cChan,'clientManager':cMgr,'clientCity':cCity,'clientSubject':cSubj,'salesFilial':salesFilial,'salesFilial3':salesFilial3,
