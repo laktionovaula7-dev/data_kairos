@@ -2743,9 +2743,13 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +'<div class="mx-card"><div class="mx-ct"><span>• Вывод</span></div><ul class="cd-ul">'+insights.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul></div>';
   }
   function cdAssort(c){
-    var emb=window.salesAbcEmbed?window.salesAbcEmbed({client:[c.name]}):'';
-    return '<div class="mx-card mg-emb"><div class="mx-ct"><span>• ABC клиента и ассортимент</span><em>как в «Продажах»: берёт / не берёт / брал раньше — относительно компании</em></div>'+emb+'</div>';
+    var br=state.cdBrand||'';
+    function _bc(v,l){return '<button class="'+(br===v?'on':'')+'" onclick="cdBrand(\''+v+'\')">'+l+'</button>';}
+    var brow='<div class="mg-ph2" style="margin:2px 0 12px"><span style="font-size:11px;color:#86888D;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-right:4px">Бренд</span><div class="mg-chips">'+_bc('','Все')+_bc('KRONbuild','KRONbuild')+_bc('ENKI','ENKI')+_bc('HeadRock','HeadRock')+'</div></div>';
+    var emb=window.salesAbcEmbed?window.salesAbcEmbed({client:[c.name],brand:br?[br]:[]}):'';
+    return '<div class="mx-card mg-emb"><div class="mx-ct"><span>• ABC клиента и ассортимент</span><em>как в «Продажах»: берёт / не берёт / брал раньше — относительно компании</em></div>'+brow+emb+'</div>';
   }
+  window.cdBrand=function(v){state.cdBrand=(state.cdBrand===v?'':v);if(window.render)render();};
   function clientDetailPage(){
     var __base=null,__cl=D.clients||[];for(var __i=0;__i<__cl.length;__i++){if(__cl[__i].id===state.client){__base=__cl[__i];break;}}
     if(!__base&&D.clientDetail)__base=D.clientDetail[state.client]||D.clientDetail[D.defaultClient];if(!__base)__base={name:'—',manager:'—',status:'Активный'};
@@ -3667,25 +3671,28 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       return '<span class="sv-mix" title="'+esc(BRN.map(function(b2){return b2+': '+fmtMoney(o.bs[b2]||0)+' ('+Math.round((o.bs[b2]||0)/t*100)+'%)';}).join(' · '))+'">'+BRN.map(function(b2){var w=(o.bs[b2]||0)/t*100;return w>0?('<i style="width:'+w.toFixed(1)+'%;background:'+BRC[b2]+'"></i>'):'';}).join('')+'</span>';}
     function gHead(k,l,al){var on=(gSk===k);return '<th class="'+(al||'')+'"><button class="sv-th'+(on?' on':'')+'" onclick="setGeo(\'sort\',\''+k+'\')">'+l+(on?(gSd<0?' ↓':' ↑'):'')+'</button></th>';}
     function pickJs(kind,name){if(kind==='okrug')return "geoSelOk('"+qs(name)+"')";if(kind==='reg')return "toggleSF('subject','"+qs(name)+"')";if(kind==='cli')return "openClientByName('"+qs(name)+"')";return "geoPick('city','"+qs(name)+"')";}
+    var _MAll=Object.keys(companySku).filter(function(k){return companySku[k]>0;}).length;   // всего SKU в ассортименте среза
+    function _skuN(cls){var s={};(cls||[]).forEach(function(cn){var b=bcs[cn];if(b)for(var kk in b)s[kk]=1;});return Object.keys(s).length;}
+    function _skuCell(n){return '<td class="r nw">'+(n>0?('<b>'+n+'</b> <span class="mu">из '+_MAll+'</span>'):'<span class="mu">—</span>')+'</td>';}
     function row(o,isNode,open,kind){kind=kind||(isNode?'okrug':'city');
       var sel=(kind==='okrug')?(sf.okrug.indexOf(o.name)>=0):(kind==='city')?(sf.city.indexOf(o.name)>=0):(kind==='reg')?(sf.subject.indexOf(o.name)>=0):false;
       var chev=isNode?('<button class="sv-chev2" onclick="geoToggle(\''+qs(o.name)+'\')" aria-expanded="'+open+'" aria-label="Города '+esc(o.name)+'">'+(open?'▾':'▸')+'</button>'):'<span class="sv-ind"></span>';
       var cov=isNode?('<span class="sv-cov" title="Города справочника с продажами'+(_gBr?(' бренда '+_gBr):'')+'"><b>'+o.cw+'</b> из '+o.kids.length+'</span>'):'';
       return '<tr class="'+(isNode?'sv-fo':'sv-ci')+(sel?' sel':'')+(kind==='reg'||kind==='cli'?' sv-ci2':'')+'"><td><div class="sv-tc">'+chev+'<div class="sv-tn"><button class="sv-name" onclick="'+pickJs(kind,o.name)+'" title="'+(o.cl?(o.cl+' покупавших клиентов'):'нет покупавших клиентов')+'">'+esc(o.name)+'</button>'+(o.has?'':'<span class="sv-tag">нет продаж'+(_gBr?(' '+_gBr):'')+'</span>')+(o.drop?'<span class="sv-tag dn">снижение</span>':'')+(isNode?('<small>'+o.cl+' клиентов</small>'):(o.sub?'<small>'+esc(o.sub)+'</small>':''))+'</div></div></td>'
-        +'<td>'+mix(o)+'</td><td class="r nw">'+(o.has?fmtMoney(o.v):'—')+'</td><td class="r nw">'+(o.pv>0?dchip(o.v,o.pv):'<span class="sv-d0" title="в прошлом периоде продаж не было">—</span>')+'</td><td class="r nw">'+(o.has&&lensTotal>0?pct(+(o.v/lensTotal*100).toFixed(1)):'—')+'</td><td class="r nw">'+cov+'</td></tr>';}
+        +'<td>'+mix(o)+'</td><td class="r nw">'+(o.has?fmtMoney(o.v):'—')+'</td><td class="r nw">'+(o.pv>0?dchip(o.v,o.pv):'<span class="sv-d0" title="в прошлом периоде продаж не было">—</span>')+'</td><td class="r nw">'+(o.has&&lensTotal>0?pct(+(o.v/lensTotal*100).toFixed(1)):'—')+'</td>'+_skuCell(isNode?_skuN(_cliUnion(o.name)):_skuN(o.cls))+'<td class="r nw">'+cov+'</td></tr>';}
     var treeRows='';
     var GLV=state.geoLvls||(state.geoLvls={reg:true});
     var CHK=['reg','city','cli'].filter(function(l){return GLV[l];});
     var gNodeOpen=state.geoNodeOpen||(state.geoNodeOpen={});
     function lvlRow(){function cb(l,lbl){return '<label class="sv-lchk"><input type="checkbox" '+(GLV[l]?'checked':'')+' onchange="geoLvlToggle(\''+l+'\')"> '+lbl+'</label>';}
-      return '<tr class="sv-modes"><td colspan="6"><div class="sv-mbar"><span class="sv-ml">Внутри ФО показать (вложенное дерево):</span><div class="sv-lchks">'+cb('reg','Регионы')+cb('city','Города')+cb('cli','Клиенты')+'</div></div></td></tr>';}
+      return '<tr class="sv-modes"><td colspan="7"><div class="sv-mbar"><span class="sv-ml">Внутри ФО показать (вложенное дерево):</span><div class="sv-lchks">'+cb('reg','Регионы')+cb('city','Города')+cb('cli','Клиенты')+'</div></div></td></tr>';}
     function keyOf(lvl,cn){return lvl==='reg'?(SUBJ[cn]||'— регион не указан'):lvl==='city'?(CT[cn]||'— город не указан'):cn;}
     function treeNodeRow(o,lvl,depth,hasChild,open,path){
       var sel=(lvl==='reg')?(sf.subject.indexOf(o.name)>=0):(lvl==='city')?(sf.city.indexOf(o.name)>=0):false;
       var pj=(lvl==='reg')?("toggleSF('subject','"+qs(o.name)+"')"):(lvl==='city')?("geoPick('city','"+qs(o.name)+"')"):("openClientByName('"+qs(o.name)+"')");
       var chev=hasChild?('<button class="sv-chev2" onclick="geoNodeToggle(\''+qs(path)+'\')" aria-expanded="'+open+'">'+(open?'▾':'▸')+'</button>'):'<span class="sv-ind"></span>';
       return '<tr class="sv-ci sv-ci2'+(sel?' sel':'')+'"><td><div class="sv-tc" style="padding-left:'+(depth*16)+'px">'+chev+'<div class="sv-tn"><button class="sv-name" onclick="'+pj+'">'+esc(o.name)+'</button>'+(o.has?'':'<span class="sv-tag">нет продаж</span>')+(o.drop?'<span class="sv-tag dn">снижение</span>':'')+(o.sub?'<small>'+esc(o.sub)+'</small>':(lvl!=='cli'?('<small>'+o.cl+' клиентов</small>'):''))+'</div></div></td>'
-        +'<td>'+mix(o)+'</td><td class="r nw">'+(o.has?fmtMoney(o.v):'—')+'</td><td class="r nw">'+(o.pv>0?dchip(o.v,o.pv):'<span class="sv-d0">—</span>')+'</td><td class="r nw">'+(o.has&&lensTotal>0?pct(+(o.v/lensTotal*100).toFixed(1)):'—')+'</td><td class="r nw"></td></tr>';}
+        +'<td>'+mix(o)+'</td><td class="r nw">'+(o.has?fmtMoney(o.v):'—')+'</td><td class="r nw">'+(o.pv>0?dchip(o.v,o.pv):'<span class="sv-d0">—</span>')+'</td><td class="r nw">'+(o.has&&lensTotal>0?pct(+(o.v/lensTotal*100).toFixed(1)):'—')+'</td>'+_skuCell(_skuN(o.cls))+'<td class="r nw"></td></tr>';}
     function buildLevel(clients,levels,depth,pathPrefix){
       if(!levels.length)return '';var lvl=levels[0],groups={};
       clients.forEach(function(cn){var k=keyOf(lvl,cn);(groups[k]||(groups[k]=[])).push(cn);});
@@ -3695,13 +3702,13 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       arr.sort(cmp);arr=arr.slice(0,levels.length>1?120:300);
       var html='';arr.forEach(function(o){var hasChild=levels.length>1;var path=pathPrefix+'||'+lvl+'='+o.name;var open=hasChild&&!!gNodeOpen[path];
         html+=treeNodeRow(o,lvl,depth,hasChild,open,path);if(hasChild&&open)html+=buildLevel(o.cls,levels.slice(1),depth+1,path);});
-      return html||'<tr class="sv-ci"><td colspan="6" class="sv-empty">нет данных под выбранный отбор</td></tr>';}
+      return html||'<tr class="sv-ci"><td colspan="7" class="sv-empty">нет данных под выбранный отбор</td></tr>';}
     function _cliUnion(ok){var m={};Object.keys(byCli).forEach(function(cn){if(CR[cn]===ok)m[cn]=1;});Object.keys(byCliP).forEach(function(cn){if(CR[cn]===ok)m[cn]=1;});return Object.keys(m);}
     shownTree.forEach(function(g){var open=!!gOpen[g.n.name]||filtOn||_okLvlOn||_cityLvlOn||(scopeOks.length===1);treeRows+=row(g.n,true,open);
       if(open){treeRows+=lvlRow();
         if(CHK.length)treeRows+=buildLevel(_cliUnion(g.n.name),CHK,1,g.n.name);
-        else treeRows+='<tr class="sv-ci"><td colspan="6" class="sv-empty">отметьте уровень: Регионы / Города / Клиенты</td></tr>';}});
-    var gTable='<div class="sv-treewrap"><table class="sv-tbl sv-tree"><thead><tr>'+gHead('n','ФО / регион / город / клиент','')+'<th>Бренды</th>'+gHead('s',_gBr?('Продажи '+_gBr):'Продажи','r')+gHead('d','К '+(yr-1),'r')+'<th class="r">Доля</th><th class="r" title="Города справочника с продажами / все города ФО">Города</th></tr></thead><tbody>'+(treeRows||'<tr><td colspan="6" class="sv-empty">нет территорий под выбранный отбор</td></tr>')+'</tbody></table></div>';
+        else treeRows+='<tr class="sv-ci"><td colspan="7" class="sv-empty">отметьте уровень: Регионы / Города / Клиенты</td></tr>';}});
+    var gTable='<div class="sv-treewrap"><table class="sv-tbl sv-tree"><thead><tr>'+gHead('n','ФО / регион / город / клиент','')+'<th>Бренды</th>'+gHead('s',_gBr?('Продажи '+_gBr):'Продажи','r')+gHead('d','К '+(yr-1),'r')+'<th class="r">Доля</th><th class="r" title="Берёт товаров (SKU) из ассортимента среза">Товары</th><th class="r" title="Города справочника с продажами / все города ФО">Города</th></tr></thead><tbody>'+(treeRows||'<tr><td colspan="7" class="sv-empty">нет территорий под выбранный отбор</td></tr>')+'</tbody></table></div>';
     var gFilt='<div class="sv-fchips">'+[['all','Все',gC.okT+' ФО · '+gC.ciT+' гор.'],['with','С продажами',gC.okW+' ФО · '+gC.ciW+' гор.'],['none','Без продаж',gC.okNone+' ФО · '+gC.none+' гор.'],['drop','Снижение',gC.okDrop+' ФО · '+gC.drop+' гор.']].map(function(f){return '<button class="'+(gFl===f[0]?'on':'')+'" onclick="setGeo(\'f\',\''+f[0]+'\')">'+f[1]+' <b>'+f[2]+'</b></button>';}).join('')+'</div>';
     // представленность брендов: сводка и просмотр по бренду
     var brandRep=true?'':('<div class="sv-brrep" role="group" aria-label="Представленность брендов">'+BRN.map(function(b2){var oc=tree.filter(function(n){return (n.bs[b2]||0)>0;}).length,cc=allKids.filter(function(k){return (k.bs[b2]||0)>0;}).length,sh=sales>0?Math.round((byBr[b2]||0)/sales*100):0,on=(_gBr===b2);
