@@ -3278,7 +3278,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var selFil=(sf.filial.length)?sf.filial:FILIALS;
     var regionDisabled=(selFil.length===1&&selFil[0]==='Сети');
     var regFil={};for(var nm in CR){var rg=CR[nm];if(rg&&rg!=='Не распределён'&&rg!=='СЕТИ')regFil[rg]=fil3(nm);}
-    var okrugs=Object.keys(regFil).filter(function(r){return selFil.indexOf(regFil[r])>=0;}).sort(function(a,b){return a.localeCompare(b,'ru');});
+    var okrugs=Object.keys(regFil).filter(function(r){return selFil.indexOf(regFil[r])>=0;}).sort(function(a,b){var ax=(a==='Не распределён')?1:0,bx=(b==='Не распределён')?1:0;return ax-bx||a.localeCompare(b,'ru');});
     var selReg=(sf.okrug.length)?sf.okrug:null;
     var citySet={},mgrSet={};
     var _geoRef=D.geoRef||{},cityOkrug={};
