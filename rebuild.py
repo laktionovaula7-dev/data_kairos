@@ -1018,7 +1018,8 @@ def build_krs(S, stock, plan, crm, price):
             'days':days})
         # months/categories/abc/recommended пересчитывает clientByPeriod из tx при открытии карточки —
         # в статике держим только лёгкую основу (иначе файл раздувается на мегабайты).
-        clientDetail[cid]={'name':name,'manager':reg,'region':reg,'city':'—','segment':'—','status':st,
+        _city=(cCity.get(name) or '').strip() or ((crm_of(name) or {}).get('city') or '').strip() or '—'
+        clientDetail[cid]={'name':name,'manager':reg,'region':reg,'city':_city,'segment':'—','status':st,
             'sales':round(rev_cur),'units':qty,'orders':ordn,'avgOrder':round(rev_cur/ordn) if ordn else 0,
             'last':last.replace('-','.') if last else '—','growth':grow(rev_cur,S['clientYear'].get(name,{}).get(PREV,0)),
             'discount':None,'brands':[{'name':'HeadRock','sales':round(rev_cur),'share':100}],'months':[],

@@ -2336,7 +2336,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
       if(!first[nm]||t[0]<first[nm])first[nm]=t[0];if(!last[nm]||t[0]>last[nm])last[nm]=t[0];}
     var all=[];
     Object.keys(first).forEach(function(nm){var c=byName[nm]||{name:nm,s:0,q:0,p:0,od:{},sk:{},br:{},cat:{},orders:0};
-      c.reg=c.reg||CR[nm]||'';c.city=c.city||CT[nm]||'';c.first=first[nm];c.last=last[nm];c.days=mcxDayDiff(c.last,A.refN);
+      c.reg=c.reg||CR[nm]||'';c.city=(c.city&&c.city!=='—'?c.city:(CT[nm]||''));c.first=first[nm];c.last=last[nm];c.days=mcxDayDiff(c.last,A.refN);
       c.stt=c.s>0?((c.first>=A.lo&&c.first<=A.hi)?'new':((c.p>0&&c.s<c.p*0.8)?'decl':'buy')):'nobuy';c.abc='';all.push(c);});
     var buyers=all.filter(function(c){return c.s>0;}).sort(function(a,b){return b.s-a.s;});mcxAbcOf(buyers,function(x){return x.s;});
     return (window.__mgd={key:key,A:A,m:m,all:all});
