@@ -616,7 +616,7 @@ def _parse_crm_file(path):
         out.append(rec)
     return out
 
-def load_crm(client_names):
+def load_crm(client_names, cinn=None):
     files=_crm_files()
     if not files: print("  CRM: файлы не найдены (папка Регионы)"); return {}
     recs=[]
@@ -626,14 +626,17 @@ def load_crm(client_names):
         for r in rr: r['_okrug']=ok
         recs+=rr
     # индекс: нормализованное имя -> запись (имя + юр.наименования + ФИО ИП)
-    idx={}
+    idx={}; inn_idx={}
     for rec in recs:
         fio=' '.join(x for x in [rec.get('fam',''),rec.get('im',''),rec.get('ot','')] if x).strip()
         for x in [rec.get('name',''),rec.get('nameShort',''),rec.get('nameFull',''),fio]:
             k=_cnorm(x)
             if k and k not in idx: idx[k]=rec
+        _ri=re.sub(r'\D','',str(rec.get('inn','')))
+        if _ri and _ri not in inn_idx: inn_idx[_ri]=rec
     tokidx=[(set(k.split()),rec) for k,rec in idx.items()]
     cid=lambda n:'c_'+re.sub(r'[^a-zа-я0-9]','',n.lower())[:20]
+    cinn=cinn or {}; byInn=0
     out={}; matched=0
     for name in client_names:
         k=_cnorm(name); rec=idx.get(k)
@@ -641,6 +644,9 @@ def load_crm(client_names):
             ts=set(k.split())
             for kt2,rr in tokidx:
                 if ts and (ts<=kt2 or kt2<=ts): rec=rr; break
+        if not rec:                                   # по названию не нашли — пробуем по ИНН из справочника
+            _ci=re.sub(r'\D','',str(cinn.get(nrm(name),'')))
+            if _ci and inn_idx.get(_ci): rec=inn_idx[_ci]; byInn+=1
         if not rec: continue
         matched+=1
         phones=', '.join(x for x in [rec['phone1'],rec['phone2']] if x)
@@ -651,7 +657,7 @@ def load_crm(client_names):
             'site':rec['site'],'responsible':rec['responsible'],'category':rec['category'],
             'employees':rec['employees'],'contractNo':rec['contractNo'],'contractDate':rec['contractDate'],
             'bank':rec['bank'],'crmId':rec['id'],'okrug':rec.get('_okrug','')}
-    print(f"  CRM: файлов {len(files)}, компаний {len(recs)}, сматчено {matched}/{len(client_names)}")
+    print(f"  CRM: файлов {len(files)}, компаний {len(recs)}, сматчено {matched}/{len(client_names)} (из них по ИНН: {byInn})")
     return out
 
 # ---------------- ПЛАН (25/26, помесячно) ----------------
@@ -1128,7 +1134,8 @@ if __name__=='__main__':
     S=parse_sales(rows,price)
     stock=load_stock()
     plan=load_plan()
-    crm=load_crm(list(S['client_net'].keys()))
+    _cinn_main,_=load_kontur()
+    crm=load_crm(list(S['client_net'].keys()),_cinn_main)
     print(f"  ИТОГО нетто: {S['company']['net']:,.0f} | клиентов: {len(S['client_net'])} | tx: {len(S['tx'])}")
     print(f"  бренды: "+", ".join(f"{k} {v:,.0f}" for k,v in sorted(S['byBrand'].items(),key=lambda x:-x[1])))
     print(f"  регионы: "+", ".join(f"{k} {v:,.0f}" for k,v in sorted(S['regSales'].items(),key=lambda x:-x[1])))

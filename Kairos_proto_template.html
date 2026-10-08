@@ -2834,7 +2834,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
   function clientCompany(c){
     var kb=konturCard(c);
     const r=(D.crm||{})[state.client];
-    if(!r) return kb+`<div class="card pad"><div class="card-title">Реквизиты и контакты ${dataTag('missing')}</div>${missingBlock('Нет в выгрузке ЦФО','Этот клиент не найден в CRM-выгрузке по ЦФО (файл покрывает Центральный ФО). Для реквизитов нужна выгрузка Битрикс24 по нужному округу, где присутствует эта компания.')}<div style="font-size:11px;color:#727987;margin-top:10px">Сверка идёт по названию — у клиентов других федеральных округов реквизитов здесь пока не будет.</div></div>`;
+    if(!r){var _inn=(D.clientInn&&D.clientInn[c.name])||(c&&c.inn)||'';
+      return kb+`<div class="card pad"><div class="card-title">Реквизиты и контакты ${dataTag('missing')}</div>${missingBlock('Нет в CRM-выгрузке','Эта компания не найдена в выгрузках Битрикс24 (они загружены по всем федеральным округам). Вероятно, клиент не заведён в CRM или в CRM отличается наименование. Сверка идёт по названию и ИНН.')}${_inn?('<div style="font-size:12px;color:#4a4d52;margin-top:10px">ИНН по справочнику продаж: <b>'+esc(_inn)+'</b></div>'):''}</div>`;}
     const RS='display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef0f3;font-size:13px';
     const KS='color:#727987;flex:0 0 auto';const VS='color:#1c2430;font-weight:600;text-align:right;word-break:break-word';
     const row=(label,val)=>`<div style="${RS}"><span style="${KS}">${label}</span><span style="${VS}${val?'':';color:#b8bec8;font-weight:400'}">${val?esc(val):'—'}</span></div>`;
