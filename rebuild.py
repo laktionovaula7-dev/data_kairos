@@ -27,15 +27,16 @@ def _pick(*cands):
     return Path(cands[0])
 # Продажи: полная история (2024-2026) — из неё берём только 2024-2025; свежий файл — 2026 до актуальной даты
 F_SALES= _pick(DATA/"Продажи по бизнес регионам 24г-26г.xlsx", ROOT/"Продажи по бизнес регионам 24г-26г.xlsx")
-F_SALES_CUR=_pick(DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # свежий 2026 (01.01.26-05.10.26)
-F_STOCK= _pick(DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
+F_SALES_CUR=_pick(DATA/"продажи 08.10.xlsx", DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # свежий 2026
+F_STOCK= _pick(DATA/"Остатки 08.10.xlsx", DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
                DATA/"Остатки и доступность по сериям.xlsx", ROOT/"Остатки и доступность по сериям.xlsx")
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
-F_TRACK= _pick(DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
+F_TRACK= _pick(DATA/"в пути и в производстве.xlsx",
+               DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления.xlsx")
 
 def _find_client_inn():
@@ -437,27 +438,43 @@ def load_stock():
         return 'Прочее'
     wb=openpyxl.load_workbook(F_STOCK,read_only=True,data_only=True); ws=wb['Лист_1']
     num=lambda x:(x if isinstance(x,(int,float)) else 0)
+    allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
+    # --- колонки определяем по заголовку (устойчиво к смене раскладки выгрузки 1С) ---
+    COL={'art':0,'name':3,'unit':6,'in':7,'ship':8,'res':9,'avail':10}   # дефолт = формат «Остатки 08.10»
+    hdr=next((rr for rr in allrows[:16] if any(isinstance(c,str) and 'в наличии' in c.lower() for c in rr)),None)
+    if hdr:
+        for i,c in enumerate(hdr):
+            if not isinstance(c,str): continue
+            t=c.lower().strip()
+            if t.startswith('артикул'): COL['art']=i
+            elif 'номенклат' in t: COL['name']=i
+            elif 'ед. изм' in t: COL['unit']=i
+            elif 'в наличии' in t: COL['in']=i
+            elif 'отгружа' in t: COL['ship']=i
+            elif 'в резерв' in t: COL['res']=i
+            elif 'доступно' in t: COL['avail']=i
     # opt = по продажному складу (для оборачиваемости); comp/wh = по ВСЕМ складам (для «Всего доступно»)
     agg=defaultdict(lambda:{'name':'','in_stock':0.0,'shipping':0.0,'reserved':0.0,'available':0.0,'incoming':0.0,
                             'company':0.0,'wh':defaultdict(float)})
-    cur_sklad=None; r=0
-    for v in ws.iter_rows(min_row=1,values_only=True):
-        r+=1
-        c0=v[0] if len(v)>0 else None; c2=v[2] if len(v)>2 else None; c5=v[5] if len(v)>5 else None
-        isart=bool(c0 and c2 and c5)                       # строка артикула: код + наименование + ед.изм
+    cur_sklad=None
+    for r,v in enumerate(allrows,1):
+        g=lambda i:(v[i] if len(v)>i else None)
+        c0=g(COL['art']); nmc=g(COL['name']); unc=g(COL['unit'])
+        isart=bool(c0 and nmc and unc)                     # строка артикула: код + наименование + ед.изм
         if c0 and not isart:                               # заголовок (склад/серия)
             if levels.get(r,0)==0: cur_sklad=str(c0).strip()
             continue
         if isart:
-            a=str(c0).strip(); d=agg[a];
-            if not d['name']: d['name']=str(c2).strip()
-            q7=num(v[7])
+            a=str(c0).strip()
+            if a.lower()=='артикул' or str(nmc).strip().lower()=='номенклатура': continue  # строка-заголовок
+            d=agg[a];
+            if not d['name']: d['name']=str(nmc).strip()
+            q7=num(g(COL['in']))
             d['company']+=q7                               # все склады
             if q7: d['wh'][wh_bucket(cur_sklad)]+=q7
             if cur_sklad==STOCK_WAREHOUSE:                 # только продажный склад
-                d['in_stock']+=q7; d['shipping']+=num(v[8]); d['reserved']+=num(v[9])
-                d['available']+=num(v[10]); d['incoming']+=num(v[11])
-    wb.close()
+                d['in_stock']+=q7; d['shipping']+=num(g(COL['ship'])); d['reserved']+=num(g(COL['res']))
+                d['available']+=num(g(COL['avail']))       # «в пути/в производстве» теперь из файла слежения (load_tracking)
     stock={a:{'name':d['name'],'in_stock':round(d['in_stock'],1),'shipping':round(d['shipping'],1),
               'reserved':round(d['reserved'],1),'available':round(d['available'],1),
               'incoming':round(d['incoming'],1),'company_in_stock':round(d['company'],1),
@@ -490,11 +507,28 @@ def load_tracking(price):
         if 'мск' in n or 'москва' in n: return 'Москва'
         return 'Прочее'
     wb=openpyxl.load_workbook(F_TRACK,read_only=True,data_only=True)
-    ws=wb[wb.sheetnames[0]]; stack={}; agg={}; r=0
-    for row in ws.iter_rows(min_row=1,values_only=True):
-        r+=1
+    ws=wb[wb.sheetnames[0]]; allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
+    # --- колонки по заголовку (устойчиво к смене раскладки) ---
+    C={'name':8,'art':6,'qty':11,'port':3,'ktk':4,'eta':5}   # дефолт = формат «в пути и в производстве»
+    hrow=next((rr for rr in allrows[:14] if any(isinstance(c,str) and c.lower().strip().startswith('артикул') for c in rr)),None)
+    if hrow:
+        for i,c in enumerate(hrow):
+            if not isinstance(c,str): continue
+            t=c.lower().strip()
+            if t.startswith('артикул'): C['art']=i
+            elif 'номенклат' in t: C['name']=i
+            elif 'порт' in t: C['port']=i
+            elif 'ктк' in t: C['ktk']=i
+            elif t.startswith('дата поступления') and 'ктк' not in t: C['eta']=i
+    qrow=next((rr for rr in allrows[:14] if any(isinstance(c,str) and 'поступит' in c.lower() for c in rr)),None)
+    if qrow:
+        for i,c in enumerate(qrow):
+            if isinstance(c,str) and 'поступит' in c.lower(): C['qty']=i
+    stack={}; agg={}
+    for r,row in enumerate(allrows,1):
         if r<11: continue
-        L=lv.get(r,0); a=row[0] if len(row)>0 else None; name=row[6] if len(row)>6 else None
+        g=lambda i:(row[i] if len(row)>i else None)
+        L=lv.get(r,0); a=g(0); name=g(C['name'])
         if a is not None and name is None:
             stack[L]=str(a).strip()
             for k in [x for x in list(stack) if x>L]: stack.pop(k,None)
@@ -505,18 +539,19 @@ def load_tracking(price):
         wh=stack.get(0,'') or ''; wl=wh.lower()
         status='В производстве' if wl.startswith('в производстве') else ('В пути' if wl.startswith('в пути') else 'Поступил')
         if status=='Поступил': continue   # уже на адресном складе — учитывается в остатках
-        try: qty=float(row[10]) if len(row)>10 and row[10] not in (None,'') else 0
+        try: qty=float(g(C['qty'])) if g(C['qty']) not in (None,'') else 0
         except (TypeError,ValueError): qty=0
         if qty<=0: continue
         nm=str(name).strip()
         m=re.search(r'от (\d{2}\.\d{2}\.20\d{2})',doc); od=m.group(1) if m else ''
-        port=_d(row[2] if len(row)>2 else None); ktk=_d(row[4] if len(row)>4 else None); eta=_d(row[5] if len(row)>5 else None)
+        port=_d(g(C['port'])); ktk=_d(g(C['ktk'])); eta=_d(g(C['eta']))
+        _artf=g(C['art'])  # артикул из файла слежения
         cat,art=cat_art(nm,price); br=brand_of(nm,price)
+        art=(str(_artf).strip() if _artf not in (None,'') else '') or art   # приоритет артикула из слежения
         key=(art or nm, _dest(wh), status, eta or '', port or '', ktk or '', od)
         if key in agg: agg[key]['qty']+=qty
         else: agg[key]={'name':nm,'art':art or '','brand':br,'cat':group_cat(cat,br,nm),
             'qty':qty,'status':status,'dest':_dest(wh),'wh':wh,'order':od,'port':port,'ktk':ktk,'eta':eta}
-    wb.close()
     out=[dict(v,qty=round(v['qty'])) for v in agg.values()]
     out.sort(key=lambda x:(x['eta'] or '9999',x['status']))
     nprod=sum(1 for o in out if o['status']=='В производстве'); ntr=sum(1 for o in out if o['status']=='В пути')
