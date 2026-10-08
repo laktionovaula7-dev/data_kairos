@@ -346,46 +346,8 @@ KI.loadSalesRows = async function (blob, progress) {
   return rows;
 };
 
-
-/* ───────────── слияние нескольких файлов продаж (история + свежий) ─────────────
- * Как в rebuild.py: каждый год берётся из того файла, где по нему больше документов (в свежем файле бывают единичные документы прошлых лет —
- * например, возвраты — они не должны вытеснять полную историю). */
-function docInfo(rows) {            // годы документов верхнего уровня и последняя дата
-  var names = [], years = {}, maxd = 0, rx = /от (\d{2})\.(\d{2})\.(\d{4})/;
-  for (var i = 0; i < rows.length; i++) {
-    var lvl = rows[i][0], name = rows[i][1];
-    if (name == null) { names[lvl] = null; names.length = lvl + 1; continue; }
-    var parent = names[lvl - 1]; names[lvl] = name; names.length = lvl + 1;
-    if (isDoc(name) && !isDoc(parent || '')) { var m = rx.exec(name); if (m) { years[+m[3]] = (years[+m[3]] || 0) + 1; var d = +(m[3] + m[2] + m[1]); if (d > maxd) maxd = d; } }
-  }
-  return { years: years, maxd: maxd };
-}
-KI.filterYear = function (rows, keep) {
-  var out = [], skip = null, names = [], rx = /от (\d{2})\.(\d{2})\.(\d{4})/;
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i], lvl = row[0], name = row[1];
-    if (skip !== null) { if (lvl > skip) continue; skip = null; }
-    if (name == null) { names[lvl] = null; names.length = lvl + 1; out.push(row); continue; }
-    var parent = names[lvl - 1]; names[lvl] = name; names.length = lvl + 1;
-    if (isDoc(name) && !isDoc(parent || '')) { var m = rx.exec(name); if (m && !keep[+m[3]]) { skip = lvl; continue; } }
-    out.push(row);
-  }
-  return out;
-};
-function periodStartYear(rows) {      // «Период: 01.01.2024 - …» в шапке отчёта
-  var txt = (rows.header || []).map(function (c) { return c.filter(function (x) { return x != null; }).join(' '); }).join('\n'), m = /Период:\s*\d{2}\.\d{2}\.(\d{4})/.exec(txt);
-  return m ? +m[1] : null;
-}
-KI.mergeSales = function (list) {
-  var minY = Math.min.apply(null, list.map(periodStartYear).filter(function (y) { return y; }).concat([9999]));
-  var infos = list.map(docInfo), owner = {};
-  infos.forEach(function (inf, idx) { Object.keys(inf.years).forEach(function (y) { if (+y < minY) return; var o = owner[y]; if (o === undefined || inf.years[y] > infos[o].years[y] || (inf.years[y] === infos[o].years[y] && inf.maxd > infos[o].maxd)) owner[y] = idx; }); });
-  var order = list.map(function (_, i) { return i; }).sort(function (a, b) { return infos[a].maxd - infos[b].maxd; }), out = [];
-  order.forEach(function (idx) { var keep = {}; Object.keys(owner).forEach(function (y) { if (owner[y] === idx) keep[y] = 1; }); out = out.concat(KI.filterYear(list[idx], keep)); });
-  out.header = list[0].header; return out;
-};
 /* ───────────── порт parse_sales ───────────── */
-KI.parseSales = function (rows, P, curYear) {
+KI.parseSales = function (rows, P, curYear, range) {
   var n = rows.length, stack = [], orderStack = [];
   var company = { gross: 0, ret: 0, net: 0, qty: 0 };
   var compYear = new Map(), brandYear = new Map(), clientYear = new Map();
@@ -430,9 +392,9 @@ KI.parseSales = function (rows, P, curYear) {
         if (stack[0] === 'Россия') { if (CL >= 3) subj = stack[2] || ''; if (CL >= 4) city = stack[3] || ''; }
         if (!clientSubject.has(comp_name)) clientSubject.set(comp_name, subj);
         if (!clientCity.has(comp_name)) clientCity.set(comp_name, city);
-        if (di > maxdate) maxdate = di;
+        if ((!range || (di >= range[0] && di <= range[1])) && di > maxdate) maxdate = di;
         if (iso && iso > (client_last.get(comp_name) || '')) client_last.set(comp_name, iso);
-        if (low.indexOf('заказ клиента') === 0) {
+        if (low.indexOf('заказ клиента') === 0 && (!range || (di >= range[0] && di <= range[1]))) {
           add(client_orders, comp_name, 1);
           if (m) {
             var hl = client_orderhist.get(comp_name); if (!hl) { hl = []; client_orderhist.set(comp_name, hl); }
@@ -456,6 +418,7 @@ KI.parseSales = function (rows, P, curYear) {
     if (!co) continue;
     if (isPosm(name)) { posm[0]++; posm[1] += nt || 0; continue; }
     var d2 = co[0], client = co[4], reg2 = co[5];
+    if(range && (d2 < range[0] || d2 > range[1]))continue;
     q = q || 0; var net = nt, b = brandOf(name, P);
     company.net += net; company.gross += (gr || 0); company.ret += (rt || 0); company.qty += q;
     add(regSales, reg2, net); add(client_net, client, net); add(client_qty, client, q);
@@ -469,7 +432,7 @@ KI.parseSales = function (rows, P, curYear) {
       cy.net += net; cy.gross += (gr || 0); cy.ret += (rt || 0); cy.qty += q;
       var by = brandYear.get(yr); if (!by) { by = new Map(); brandYear.set(yr, by); } add(by, b, net);
       var cly = clientYear.get(client); if (!cly) { cly = new Map(); clientYear.set(client, cly); } add(cly, yr, net);
-      if (net !== 0) tx.push([d2, ci(client), si(name, art), round1(q), pyRound(net)]);
+      if (net !== 0) tx.push([d2, ci(client), si(name, art), round1(q), pyRound(net), gr || 0, rt || 0]);
     }
   }
   inwork.sort(function (a, b) { return b.not_shipped - a.not_shipped; });
@@ -804,24 +767,87 @@ KI.checkSales = function (rows, S, D) {
 
 KI.nrm = nrm; KI.cid = cid; KI.mkPrice = mkPrice;
 
+/* Replace the explicit export interval and retain transactions outside it. */
+KI.mergeSalesPeriod = function (fresh, D, P, from, to) {
+  function date(s) { var m=/^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s||''); return m ? +(m[3]+m[2]+m[1]) : 0; }
+  var lo=date(from),hi=date(to);
+  if(!lo||!hi||lo>hi)throw new Error('Не удалось определить период выгрузки. Нужна строка «Период: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ» в шапке отчёта.');
+  if(fresh.tx.some(function(t){return t[0]<lo||t[0]>hi;}))throw new Error('Даты продаж выходят за период в шапке отчёта. Проверьте выгрузку.');
+  var retained=(D.tx||[]).filter(function(t){return t[0]<lo||t[0]>hi;});
+  if(retained.some(function(t){var m=String(t[0]).slice(0,6);return t.length<7 && +(m+'31')>=lo && +(m+'01')<=hi;}))throw new Error('Для сохранения точных продаж и возвратов загрузите пограничный месяц целиком: в старой истории нет детализации возвратов по дням. Остальные месяцы и годы сохранятся.');
+  // Reuse the same parser for retained product quantities and net revenue.
+  var rows=[],skus=D.txSkus||[],clients=D.txClients||[];
+  retained.forEach(function(t){
+    var sku=skus[t[2]],client=clients[t[1]],ds=String(t[0]);
+    if(!sku||!client)throw new Error('В сохранённой истории повреждён справочник продаж.');
+    rows.push([0,'Россия'],[1,client],[2,'Реализация история от '+ds.slice(6,8)+'.'+ds.slice(4,6)+'.'+ds.slice(0,4),0,0,0,t[4]],
+      [3,sku[1],t[3],t[5]!=null?t[5]:Math.max(0,t[4]),t[6]!=null?t[6]:Math.min(0,t[4]),t[4],sku[0]]);
+  });
+  var old=KI.parseSales(rows,P,Math.floor(fresh.maxdate/10000)||Math.floor(hi/10000));
+  ['clientRegion','clientFilial','clientChannel','clientCity','clientSubject'].forEach(function(key){
+    old[key].forEach(function(v,name){if(D[key]&&D[key][name]!=null)old[key].set(name,D[key][name]);});
+  });
+  old.regSales=new Map();retained.forEach(function(t){var r=(D.clientRegion||{})[clients[t[1]]]||'Не распределён';old.regSales.set(r,(old.regSales.get(r)||0)+t[4]);});
+  // Preserve exact gross/returns aggregates for wholly retained months.
+  Object.keys(old.yearMonth).forEach(function(ym){
+    if(+(ym+'31')<lo||+(ym+'01')>hi){
+      if(D.ym&&D.ym[ym]!=null)old.yearMonth[ym]=D.ym[ym];
+      if(D.ymGross&&D.ymGross[ym]!=null)old.ymGross[ym]=D.ymGross[ym];
+      if(D.ymRet&&D.ymRet[ym]!=null)old.ymRet[ym]=D.ymRet[ym];
+    }
+  });
+  function addMaps(target,src){src.forEach(function(v,k){
+    if(v instanceof Map){if(!target.has(k))target.set(k,new Map());addMaps(target.get(k),v);}
+    else if(Array.isArray(v)){var a=target.get(k)||v.map(function(){return 0;});target.set(k,a.map(function(x,i){return x+v[i];}));}
+    else if(typeof v==='number')target.set(k,(target.get(k)||0)+v);
+  });}
+  ['comp','brandYear','clientYear','client_net','client_qty','client_prod','regSales'].forEach(function(k){addMaps(fresh[k],old[k]);});
+  ['clientRegion','clientFilial','clientChannel','clientCity','clientSubject'].forEach(function(k){old[k].forEach(function(v,name){if(!fresh[k].has(name))fresh[k].set(name,v);});});
+  old.client_last.forEach(function(v,k){if(v>(fresh.client_last.get(k)||''))fresh.client_last.set(k,v);});
+  ['yearMonth','ymGross','ymRet'].forEach(function(k){Object.keys(old[k]).forEach(function(m){fresh[k][m]=(fresh[k][m]||0)+old[k][m];});});
+  // Year and company gross/returns follow the merged monthly aggregates.
+  old.compYear.forEach(function(v,y){var a=fresh.compYear.get(y)||{net:0,qty:0,gross:0,ret:0};a.net+=v.net;a.qty+=v.qty;fresh.compYear.set(y,a);});
+  fresh.company.net+=old.company.net;fresh.company.qty+=old.company.qty;
+  fresh.company.gross=0;fresh.company.ret=0;
+  fresh.compYear.forEach(function(v){v.gross=0;v.ret=0;v.net=0;});
+  fresh.company.net=0;
+  Object.keys(fresh.yearMonth).forEach(function(m){var y=fresh.compYear.get(+m.slice(0,4)),g=fresh.ymGross[m]||0,r=fresh.ymRet[m]||0;y.net+=fresh.yearMonth[m];fresh.company.net+=fresh.yearMonth[m];y.gross+=g;y.ret+=r;fresh.company.gross+=g;fresh.company.ret+=r;});
+  var ci=new Map(fresh.tx_clients.map(function(v,i){return [v,i];})),ct=new Map(fresh.tx_cats.map(function(v,i){return [v,i];}));
+  function skuKey(s,cats){return JSON.stringify([s[0],s[1],cats[s[2]],s[3]]);}
+  var si=new Map(fresh.tx_skus.map(function(v,i){return [skuKey(v,fresh.tx_cats),i];}));
+  retained.forEach(function(t){
+    var name=clients[t[1]],sku=skus[t[2]],cat=D.txCats[sku[2]],key=skuKey(sku,D.txCats);
+    if(!ci.has(name)){ci.set(name,fresh.tx_clients.length);fresh.tx_clients.push(name);}
+    if(!ct.has(cat)){ct.set(cat,fresh.tx_cats.length);fresh.tx_cats.push(cat);}
+    if(!si.has(key)){si.set(key,fresh.tx_skus.length);fresh.tx_skus.push([sku[0],sku[1],ct.get(cat),sku[3]]);}
+    var row=t.slice();row[1]=ci.get(name);row[2]=si.get(key);fresh.tx.push(row);
+  });
+  // Keep document histories when the underlying export snapshot is available.
+  var histories=D.salesOrderHistory||{};
+  Object.keys(histories).forEach(function(name){var h=histories[name].filter(function(x){var d=date(x.date);return d<lo||d>hi;});
+    if(h.length){fresh.client_orderhist.set(name,(fresh.client_orderhist.get(name)||[]).concat(h));fresh.client_orders.set(name,(fresh.client_orders.get(name)||0)+h.length);}
+  });
+  (D.ordersInWork||[]).forEach(function(x){var d=date(x.date);if(d<lo||d>hi)fresh.inwork.push(x);});
+  fresh.maxdate=Math.max(fresh.maxdate,old.maxdate);
+  return {sales:fresh,retained:retained.length,from:from,to:to};
+};
+
 /* Полный цикл: файлы → новая модель данных. files: {sales: Blob, stock?: Blob, expiry?: Blob}. */
 KI.run = async function (files, D, onStage) {
   var P = mkPrice(D.refs || {}), st = onStage || function () {}, rows = null, S = null, stock, expiryRaw, notes = [], head = '', pm = null;
   var cur = (D.refDate ? +String(D.refDate).slice(0, 4) : 2026);
-  if (files.sales && [].concat(files.sales).length) {
-    var sfiles = [].concat(files.sales), parts = [];
-    for (var fi = 0; fi < sfiles.length; fi++) {
-      st('Читаю файл продаж ' + (sfiles.length > 1 ? (fi + 1) + ' из ' + sfiles.length : '') + '…', 0);
-      parts.push(await KI.loadSalesRows(sfiles[fi], function (p) { st('Читаю файл продаж…', p); }));
-    }
+  if (files.sales) {
+    st('Читаю файл продаж…', 0);
+    rows = await KI.loadSalesRows(files.sales, function (p) { st('Читаю файл продаж…', p); });
     st('Считаю продажи…', 1);
-    rows = KI.mergeSales(parts);
     await new Promise(function (r) { setTimeout(r, 20); });
     var hdr = rows.header || []; head = hdr.map(function (c) { return c.filter(function (x) { return x != null; }).join(' '); }).join('\n');
     if (head.indexOf('Партнер.Бизнес-регион') < 0) throw new Error('Это не отчёт «Продажи по бизнес регионам»: в шапке нет колонки «Партнер.Бизнес-регион». Выгрузите отчёт из 1С в том же виде, что и раньше (иерархия: бизнес-регион → партнёр → заказ → номенклатура).');
     pm = /Период:\s*(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})/.exec(head);
-    S = KI.parseSales(rows, P, cur);
-    var maxy = Math.floor(S.maxdate / 10000); if (maxy && maxy !== cur) { cur = maxy; S = KI.parseSales(rows, P, cur); }
+    if(!pm)throw new Error('В шапке выгрузки не найден период. История сохранена; выберите отчёт с указанными датами.');
+    var exportRange=pm.slice(1).map(function(v){var p=v.split('.');return +(p[2]+p[1]+p[0]);});
+    S = KI.parseSales(rows, P, cur, exportRange);
+    var maxy = Math.floor(S.maxdate / 10000); if (maxy && maxy !== cur) { cur = maxy; S = KI.parseSales(rows, P, cur, exportRange); }
   } else throw new Error('Нужен файл продаж');
   var chk = KI.checkSales(rows, S, D);
   if (pm) { chk.info.periodFrom = pm[1]; chk.info.periodTo = pm[2]; }
@@ -832,9 +858,15 @@ KI.run = async function (files, D, onStage) {
   else { expiryRaw = (D.refs || {}).expiry || {}; }
   st('Собираю модель…', 1);
   await new Promise(function (r) { setTimeout(r, 20); });
+  if(!pm)throw new Error('В шапке выгрузки не найден период. История сохранена; выберите отчёт с указанными датами.');
+  var merged=KI.mergeSalesPeriod(S,D,P,pm[1],pm[2]); S=merged.sales;
+  chk.warns=chk.warns.filter(function(w){return w.indexOf('часть истории пропадёт')<0;});
+  notes.push('Заменены продажи за '+pm[1]+' – '+pm[2]+'. За пределами периода сохранено '+merged.retained+' строк.');
+  chk.info.retained=merged.retained;
   var K = KI.buildKRS(S, stock, expiryRaw, { D: D, P: P });
+  K.salesOrderHistory=obj(S.client_orderhist);
   K.refs = Object.assign({}, D.refs || {}, { stock: stock, expiry: expiryRaw });
-  K.__ingest = { at: new Date().toISOString(), files: { sales: files.sales ? [].concat(files.sales).map(function (f) { return f.name; }).join(', ') : null, stock: files.stock && files.stock.name || null, expiry: files.expiry && files.expiry.name || null },
+  K.__ingest = { at: new Date().toISOString(), files: { sales: files.sales && files.sales.name || null, stock: files.stock && files.stock.name || null, expiry: files.expiry && files.expiry.name || null },
     warns: chk.warns, info: chk.info, notes: notes };
   return K;
 };
@@ -870,6 +902,12 @@ UI.boot = function () {
     if (started) return; started = true;
     var s = document.getElementById('krs-app'); if (!s) return;
     var n = document.createElement('script'); n.textContent = s.textContent; document.body.appendChild(n);
+  }
+  if(root.KairosShared){
+    root.KairosShared.boot().then(start).catch(function(e){
+      var box=document.createElement('div');box.style.cssText='padding:40px;font:16px system-ui';box.textContent=e.message;
+      var retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=function(){location.reload();};box.appendChild(retry);document.body.appendChild(box);
+    });return;
   }
   var timer = setTimeout(start, 2500);
   idbGet().then(function (st) {
@@ -910,7 +948,7 @@ function mb(n) { return (n / 1048576).toFixed(1) + ' МБ'; }
 
 var KINDS = [
   { id: 'sales', title: 'Продажи по бизнес-регионам', req: true, re: /продаж/i,
-    hint: '1С → отчёт «Продажи по бизнес регионам», период с 01.01.2024 по сегодня, подразделения Москва / HeadRock МСК / Владивосток / HeadRock Владивосток / СЕТИ, бренды ENKI, KRONbuild, HeadRock. Сохранить в .xlsx без изменений. Можно выбрать два файла: полную историю и свежий период — каждый год берётся из файла, где по нему больше данных.' },
+    hint: '1С → отчёт «Продажи по бизнес регионам», период с 01.01.2024 по сегодня, подразделения Москва / HeadRock МСК / Владивосток / HeadRock Владивосток / СЕТИ, бренды ENKI, KRONbuild, HeadRock. Сохранить в .xlsx без изменений.' },
   { id: 'stock', title: 'Остатки и доступность по сериям', req: false, re: /остатк|доступн/i, hint: 'Отчёт «Остатки и доступность по сериям», все склады. Если не выбирать — останутся прежние остатки.' },
   { id: 'expiry', title: 'Товары с окончанием срока годности', req: false, re: /годност|срок/i, hint: 'Отчёт «Товары на складах с окончанием срока годности». Если не выбирать — останутся прежние сроки.' }
 ];
@@ -929,19 +967,19 @@ function nowText() {
 
 function render() {
   var box = document.getElementById('ki-box'); if (!box) return;
-  var ok = !!(files.sales && [].concat(files.sales).length);
+  var ok = !!files.sales;
   var rows = KINDS.map(function (k) {
-    var f = files[k.id], fl = Array.isArray(f) ? f : (f ? [f] : []);
+    var f = files[k.id];
     return '<div class="ki-row"><div><b>' + k.title + '</b><em class="' + (k.req ? '' : 'opt') + '">' + (k.req ? 'обязательно' : 'по желанию') + '</em></div>' +
-      '<div><button class="ki-btn" data-pick="' + k.id + '">' + (fl.length ? 'Заменить' : 'Выбрать файл') + '</button></div>' +
-      (fl.length ? fl.map(function (x) { return '<div class="ki-file">✓ ' + esc(x.name) + ' · ' + mb(x.size) + '</div>'; }).join('') : '<small>' + k.hint + '</small>') + '</div>';
+      '<div><button class="ki-btn" data-pick="' + k.id + '">' + (f ? 'Заменить' : 'Выбрать файл') + '</button></div>' +
+      (f ? '<div class="ki-file">✓ ' + esc(f.name) + ' · ' + mb(f.size) + '</div>' : '<small>' + k.hint + '</small>') + '</div>';
   }).join('');
-  box.innerHTML = '<div class="ki-h"><div><h2>Обновить данные из 1С</h2><p>Выберите свежие выгрузки — дашборд пересчитается прямо в браузере, ничего никуда не отправляется.</p></div><button class="ki-x" data-x>×</button></div>' +
+  box.innerHTML = '<div class="ki-h"><div><h2>Обновить данные из 1С</h2><p>Новый файл заменяет продажи только за период в шапке отчёта. История за остальные даты сохраняется. '+(root.KairosShared?'После применения данные увидит весь отдел.':'Пересчёт и сохранение выполняются в этом браузере.')+'</p></div><button class="ki-x" data-x>×</button></div>' +
     '<div class="ki-b"><div class="ki-now">' + nowText() + '</div>' +
     '<div class="ki-drop" id="ki-drop">Перетащите сюда файлы (можно сразу все три) или выберите ниже</div>' + rows +
     '<div id="ki-out"></div></div>' +
-    '<div class="ki-f"><button class="ki-btn link" data-act="exp">Сохранить текущие данные в файл</button><button class="ki-btn link" data-act="imp">Открыть файл данных</button>' +
-    ((root.__krsSource || {}).kind === 'uploaded' ? '<button class="ki-btn link" data-act="reset">Вернуть данные из файла</button>' : '') +
+    '<div class="ki-f">'+(root.KairosShared&&root.KairosShared.isAdmin?'<button class="ki-btn link" data-act="shared-settings">Права загрузки и версии</button>':'')+'<button class="ki-btn link" data-act="exp">Сохранить текущие данные в файл</button><button class="ki-btn link" data-act="imp">Открыть файл данных</button>' +
+    (!root.KairosShared && (root.__krsSource || {}).kind === 'uploaded' ? '<button class="ki-btn link" data-act="reset">Вернуть данные из файла</button>' : '') +
     '<span class="sp"></span><button class="ki-btn" data-x>Закрыть</button><button class="ki-btn pri" id="ki-go" ' + (ok && !busy ? '' : 'disabled') + '>Загрузить и пересчитать</button></div>';
   bindBox(box);
 }
@@ -958,8 +996,7 @@ function assign(list) {
   list.forEach(function (f) {
     if (!/\.xlsx$/i.test(f.name)) { unknown.push(f.name + ' (нужен .xlsx)'); return; }
     var k = KINDS.filter(function (x) { return x.re.test(f.name); })[0];
-    if (k && k.id === 'sales') { files.sales = (files.sales || []).filter(function (x) { return x.name !== f.name; }).concat([f]); }
-    else if (k) files[k.id] = f; else unknown.push(f.name);
+    if (k) files[k.id] = f; else unknown.push(f.name);
   });
   render();
   if (unknown.length) out('<div class="ki-w">Не удалось определить тип файла: ' + unknown.map(esc).join(', ') + '. Нажмите «Выбрать файл» в нужной строке.</div>');
@@ -969,7 +1006,7 @@ function out(h) { var o = document.getElementById('ki-out'); if (o) o.innerHTML 
 function bindBox(box) {
   [].forEach.call(box.querySelectorAll('[data-x]'), function (b) { b.onclick = close; });
   [].forEach.call(box.querySelectorAll('[data-pick]'), function (b) {
-    b.onclick = function () { var id = b.getAttribute('data-pick'); pickFile(id === 'sales' ? 'multi' : '.xlsx', function (l) { if (id === 'sales') files.sales = l; else files[id] = l[0]; render(); }); };
+    b.onclick = function () { var id = b.getAttribute('data-pick'); pickFile('.xlsx', function (l) { files[id] = l[0]; render(); }); };
   });
   var dz = box.querySelector('#ki-drop');
   if (dz) {
@@ -982,6 +1019,7 @@ function bindBox(box) {
   [].forEach.call(box.querySelectorAll('[data-act]'), function (b) {
     b.onclick = function () {
       var a = b.getAttribute('data-act');
+      if(a==='shared-settings'){root.KairosShared.settings().catch(function(e){out('<div class="ki-w err">'+esc(e.message)+'</div>');});return;}
       if (a === 'exp') exportData(); else if (a === 'imp') pickFile('.kairos,.gz', importData);
       else if (a === 'reset') { if (confirm('Удалить загруженные в этом браузере данные и вернуться к данным из файла?')) idbDel().then(function () { location.reload(); }); }
     };
@@ -989,7 +1027,8 @@ function bindBox(box) {
 }
 
 function run() {
-  if (busy || !(files.sales && [].concat(files.sales).length)) return; busy = true;
+  if(root.KairosShared&&!root.KairosShared.canUpload){out('<div class="ki-w err">Администратор должен выдать вам право обновлять данные.</div>');return;}
+  if (busy || !files.sales) return; busy = true;
   var go = document.getElementById('ki-go'); if (go) go.disabled = true;
   out('<div id="ki-st" style="font-size:13px;font-weight:600">Начинаю…</div><div class="ki-bar"><i id="ki-pb"></i></div><small style="color:#727987">Файл продаж большой (≈18 МБ) — обычно это занимает 10–40 секунд. Не закрывайте вкладку.</small>');
   var base = current(), t0 = Date.now();
@@ -1014,12 +1053,13 @@ function report(K, base, sec) {
     (inf.filter ? '<div style="font-size:11.5px;color:#727987;margin-bottom:8px">Отбор в файле: ' + esc(inf.filter) + '</div>' : '') +
     (ing.notes.length ? '<div style="font-size:12px;color:#727987;margin-bottom:6px">' + ing.notes.map(esc).join(' · ') + '</div>' : '') +
     warn.map(function (w) { return '<div class="ki-w">' + esc(w) + '</div>'; }).join('') +
-    '<div style="margin-top:10px"><button class="ki-btn pri" id="ki-apply">Применить и открыть дашборд</button> <span style="font-size:12px;color:#727987">Данные сохранятся в этом браузере.</span></div>');
+    '<div style="margin-top:10px"><button class="ki-btn pri" id="ki-apply">'+(root.KairosShared?'Опубликовать для всего отдела':'Применить и открыть дашборд')+'</button> <span style="font-size:12px;color:#727987">'+(root.KairosShared?'Предыдущую версию можно восстановить.':'Данные сохранятся в этом браузере.')+'</span></div>');
   var a = document.getElementById('ki-apply');
   if (a) a.onclick = function () {
     a.disabled = true; a.textContent = 'Сохраняю…';
-    idbPut({ data: result, savedAt: Date.now() }).then(function () { location.reload(); }).catch(function (e) {
+    (root.KairosShared?root.KairosShared.publish(result):idbPut({ data: result, savedAt: Date.now() })).then(function () { location.reload(); }).catch(function (e) {
       a.disabled = false; a.textContent = 'Применить и открыть дашборд';
+      if(root.KairosShared){out('<div class="ki-w err">'+esc(e.message)+'</div>');return;}
       out('<div class="ki-w err">Браузер не дал сохранить данные (' + esc(e && e.message || e) + '). Чаще всего это приватное окно или запрет на хранение для локальных файлов. Откройте дашборд в обычном окне Chrome/Edge.</div>');
     });
   };
@@ -1036,6 +1076,7 @@ function exportData() {
   });
 }
 function importData(l) {
+  if(root.KairosShared){out('<div class="ki-w">Для общей базы загрузите исходную выгрузку Excel. Файл данных браузера не публикуется.</div>');return;}
   var f = l[0]; out('<div style="font-size:13px">Читаю файл данных…</div>');
   gunzip(f).then(function (t) {
     var d = JSON.parse(t);
@@ -3318,13 +3359,13 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var _exclSmart=!_setiScope;
     function cliGeoPass(cn){return inSel(sf.client,cn)&&inSel(sf.filial,fil3(cn))&&inSel(sf.okrug,CR[cn])&&inSel(sf.subject,SUBJ[cn])&&inSel(sf.city,CT[cn])&&inSel(sf.manager,CM[cn]);}
     var _fM=Math.floor((lo%10000)/100)||1,_lM=Math.floor((hi%10000)/100)||12,_lastData=_fM;for(var _m=12;_m>=_fM;_m--){var _kk=''+yr+(_m<10?'0'+_m:_m);if(D.ym&&D.ym[_kk]){_lastData=_m;break;}}var _effM=Math.min(_lM,_lastData);var _pl=(yr-1)*10000+_fM*100+1,_ph=prevEndFor(yr,_effM);
-    var sales=0,qty=0,ord={},cl={},byM={},byMp={},byDim={},byCityN={},byCityP={},byCityCl={},okP={},okCl={},byMBrP={},okBrP={},byBrCityP={},byCli={},byCliP={},byBrCity={},byBrCl={},bySku={},okS={},bcs={},byBr={HeadRock:0,KRONbuild:0,ENKI:0},byMBr={},okBr={},mgS={},mgBr={},mgOk={},mgCl={},bySkuPrev={},byCat={},ps=0,pq=0,pcl={},por={};
+    var sales=0,qty=0,ord={},cl={},byM={},byMp={},byDim={},byCityN={},byCityP={},byCityCl={},okP={},okCl={},byMBrP={},okBrP={},byBrCityP={},byCli={},byCliP={},byBrCity={},byBrCl={},bySku={},qtyBySku={},okS={},bcs={},byBr={HeadRock:0,KRONbuild:0,ENKI:0},byMBr={},okBr={},mgS={},mgBr={},mgOk={},mgCl={},bySkuPrev={},byCat={},ps=0,pq=0,pcl={},por={};
     for(var i=0;i<D.tx.length;i++){var t=D.tx[i],cn=D.txClients[t[1]],sk=t[2];if(!match(cn,sk))continue;var tv=mvOf(t);if(tv===null)continue;var d=t[0],y=Math.floor(d/10000),mm=(''+d).slice(4,6);
       if(y===yr){byM[mm]=(byM[mm]||0)+tv;var _bm=brOf(sk);if(!byMBr[_bm])byMBr[_bm]={};byMBr[_bm][mm]=(byMBr[_bm][mm]||0)+tv;}else if(y===yr-1){byMp[mm]=(byMp[mm]||0)+tv;var _bq2=brOf(sk);if(!byMBrP[_bq2])byMBrP[_bq2]={};byMBrP[_bq2][mm]=(byMBrP[_bq2][mm]||0)+tv;}
       if(d>=lo&&d<=hi){sales+=tv;qty+=t[3];cl[t[1]]=1;ord[t[1]+'|'+d]=1;
         var key=(by==='clients')?cn:(by==='cities')?(CT[cn]||'— город не указан'):(by==='managers')?(CM[cn]||'— не назначен'):(by==='okrugs')?(CR[cn]||'—'):(by==='brands')?brOf(sk):(D.txSkus[sk]||['','',0])[1];
         byDim[key]=(byDim[key]||0)+tv;
-        bySku[sk]=(bySku[sk]||0)+tv;var _bs=brOf(sk);byBr[_bs]=(byBr[_bs]||0)+tv;var _scat=D.txCats[(D.txSkus[sk]||['','',0])[2]];if(_scat&&_scat!=='Без категории')byCat[_scat]=(byCat[_scat]||0)+tv;
+        bySku[sk]=(bySku[sk]||0)+tv;qtyBySku[sk]=(qtyBySku[sk]||0)+t[3];var _bs=brOf(sk);byBr[_bs]=(byBr[_bs]||0)+tv;var _scat=D.txCats[(D.txSkus[sk]||['','',0])[2]];if(_scat&&_scat!=='Без категории')byCat[_scat]=(byCat[_scat]||0)+tv;
         var _ct=CT[cn];if(_ct){var _n=nc(_ct);byCityN[_n]=(byCityN[_n]||0)+tv;}byCli[cn]=(byCli[cn]||0)+tv;{var _ctc=CT[cn];if(_ctc){var _nc3=nc(_ctc);(byCityCl[_nc3]||(byCityCl[_nc3]={}))[t[1]]=1;}var _rgc=CR[cn];if(_rgc){(okCl[_rgc]||(okCl[_rgc]={}))[t[1]]=1;}}{var _bq=brOf(sk);if(_ct){if(!byBrCity[_bq])byBrCity[_bq]={};var _n2=nc(_ct);byBrCity[_bq][_n2]=(byBrCity[_bq][_n2]||0)+tv;}if(!byBrCl[_bq])byBrCl[_bq]={};byBrCl[_bq][cn]=1;}if(CR[cn]){okS[CR[cn]]=(okS[CR[cn]]||0)+tv;var _rbr=brOf(sk);if(!okBr[CR[cn]])okBr[CR[cn]]={};okBr[CR[cn]][_rbr]=(okBr[CR[cn]][_rbr]||0)+tv;}if(!bcs[cn])bcs[cn]={};bcs[cn][sk]=1;var _mgn=CM[cn];if(_mgn&&_mgn!=='Не назначен'&&_mgn!=='Не распределён'){mgS[_mgn]=(mgS[_mgn]||0)+tv;var _mb=brOf(sk);if(!mgBr[_mgn])mgBr[_mgn]={};mgBr[_mgn][_mb]=(mgBr[_mgn][_mb]||0)+tv;if(CR[cn]&&CR[cn]!=='Не распределён'){if(!mgOk[_mgn])mgOk[_mgn]={};mgOk[_mgn][CR[cn]]=1;}if(!mgCl[_mgn])mgCl[_mgn]={};mgCl[_mgn][cn]=(mgCl[_mgn][cn]||0)+tv;}}
       if(d>=_pl&&d<=_ph){ps+=tv;byCliP[cn]=(byCliP[cn]||0)+tv;if(CR[cn])okP[CR[cn]]=(okP[CR[cn]]||0)+tv;{var _bpp=brOf(sk);if(CR[cn]){var _oq=okBrP[CR[cn]]||(okBrP[CR[cn]]={});_oq[_bpp]=(_oq[_bpp]||0)+tv;}if(CT[cn]){var _npp=nc(CT[cn]);var _bq3=byBrCityP[_bpp]||(byBrCityP[_bpp]={});_bq3[_npp]=(_bq3[_npp]||0)+tv;}}{var _ctp=CT[cn];if(_ctp){var _np=nc(_ctp);byCityP[_np]=(byCityP[_np]||0)+tv;}}pq+=t[3];pcl[t[1]]=1;por[t[1]+'|'+d]=1;bySkuPrev[sk]=(bySkuPrev[sk]||0)+tv;}}
     var nCl=Object.keys(cl).length,nOrd=Object.keys(ord).length;var growth=ps?((sales-ps)/ps*100):null;
@@ -3806,7 +3847,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     function stockSel(art){var tv=T[art]||{};if(whAll){var a=tv.company_in_stock;if(a==null)a=tv.in_stock;if(a!=null)return a;}var t=0,any=false;whSel.forEach(function(w){var v=stockOf(art,w);if(v!=null){t+=v;any=true;}});return any?t:null;}
     var STL={buy:'Берёт',prev:'Брал раньше',never:'Не брал'};
     var abcRows=Object.keys(companySku).filter(function(k){return companySku[k]>0;}).map(function(k){var si=D.txSkus[k]||['','—',0,''],s=bySku[k]||0,p=bySkuPrev[k]||0,cc=ccls[k]||'C',lc=s>0?(levCls[k]||'C'):'NB',st=s>0?'buy':(p>0?'prev':'never');
-      return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',cc:cc,lc:lc,st:st,s:s,comp:companySku[k],share:companySku[k]/compTotal,av:stockSel(si[0])};});
+      return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',cc:cc,lc:lc,st:st,s:s,qty:qtyBySku[k]||0,comp:companySku[k],share:companySku[k]/compTotal,av:stockSel(si[0])};});
     var cell=state.abcCell;
     var abcFiltered=abcRows.filter(function(r){
       if(cell&&!(r.cc===cell.cc&&r.lc===cell.lc))return false;
@@ -4003,6 +4044,10 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     if(!X.whSel||!X.whSel.length){svToast('Выберите хотя бы один склад для выгрузки.');return;}
     var T=X.T||{},W=X.whSel,sheets=[];
     function stockRow(art){return W.map(function(w){var v=(T[art]&&T[art].wh)?T[art].wh[w]:null;return v==null?'':Math.round(v);});}
+    var incByArt={};(D.incoming||[]).forEach(function(o){var a=o.art||o.name;var x=incByArt[a]||(incByArt[a]={p:0,t:0});if(o.status==='В производстве')x.p+=o.qty;else if(o.status==='В пути')x.t+=o.qty;});
+    function qnum(v){return (v==null||v==='')?'':{v:Math.round(v),s:'n'};}
+    var QHDR=['Продано, шт','В наличии, шт','Отгружается, шт','В резерве, шт','Доступно, шт','В производстве, шт','В пути, шт'];
+    function qtyCells(art,soldQty){var tv=T[art]||{},ic=incByArt[art]||{p:0,t:0};return [qnum(soldQty),qnum(tv.in_stock),qnum(tv.shipping),qnum(tv.reserved),qnum(tv.available),qnum(ic.p),qnum(ic.t)];}
     var abcRule='A — накопленная доля выручки позиции (с её учётом) ≤80%; B — ≤95%; C — остальное. Позиция, пересекающая границу, относится к более низкому классу. Возвраты вычитаются (нетто).';
     if(!full){
       var rowsX=X.filtered,F=X.AF||{},cell=X.cell;
@@ -4012,24 +4057,24 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       var mr=[['ABC компании \\ '+X.lvl,'A','B','C','Не берёт','Всего']];['A','B','C'].forEach(function(cc){var r=X.mtx[cc];mr.push([cc,r.A,r.B,r.C,r.NB,r.A+r.B+r.C+r.NB]);});
       var ct={A:0,B:0,C:0,NB:0};['A','B','C'].forEach(function(cc){['A','B','C','NB'].forEach(function(lc){ct[lc]+=X.mtx[cc][lc];});});mr.push([{v:'Итого',s:'b'},ct.A,ct.B,ct.C,ct.NB,ct.A+ct.B+ct.C+ct.NB]);mr.push([]);mr.push([{v:'Единица измерения — количество товаров, SKU. Матрица полная, до локальных фильтров таблицы.',s:'w'}]);
       sheets.push({name:'Матрица ABC',cols:[220,70,70,70,90,80],rows:mr,header:1,filter:false});
-      var hdr=['Артикул','Товар','Категория','Бренд','ABC компании','ABC среза','Статус покупок','Продажи среза, ₽','Продажи компании, ₽','Доля в компании'].concat(W.map(function(w){return 'Наличие: '+w;})).concat(['Наличие, итого']);
+      var hdr=['Артикул','Товар','Категория','Бренд','ABC компании','ABC среза','Статус покупок','Продажи среза, ₽','Продажи компании, ₽','Доля в компании'].concat(QHDR).concat(W.map(function(w){return 'Наличие: '+w;})).concat(['Наличие, итого']);
       var ar=[hdr];var STL={buy:'Берёт',prev:'Брал раньше',never:'Не брал'};
-      rowsX.forEach(function(r){ar.push([r.art,r.name,r.cat,r.brand,r.cc,r.lc==='NB'?'—':r.lc,STL[r.st],{v:Math.round(r.s),s:'n'},{v:Math.round(r.comp),s:'n'},{v:r.share,s:'p'}].concat(stockRow(r.art)).concat([r.av==null?'':Math.round(r.av)]));});
-      sheets.push({name:'Ассортимент',cols:[90,320,150,90,70,70,100,110,120,90].concat(W.map(function(){return 90;})).concat([90]),rows:ar,header:1});
+      rowsX.forEach(function(r){ar.push([r.art,r.name,r.cat,r.brand,r.cc,r.lc==='NB'?'—':r.lc,STL[r.st],{v:Math.round(r.s),s:'n'},{v:Math.round(r.comp),s:'n'},{v:r.share,s:'p'}].concat(qtyCells(r.art,r.qty)).concat(stockRow(r.art)).concat([r.av==null?'':Math.round(r.av)]));});
+      sheets.push({name:'Ассортимент',cols:[90,320,150,90,70,70,100,110,120,90].concat(QHDR.map(function(){return 95;})).concat(W.map(function(){return 90;})).concat([90]),rows:ar,header:1});
       var sk=[['Артикул','Товар'].concat(W)];rowsX.forEach(function(r){sk.push([r.art,r.name].concat(stockRow(r.art)));});
       sheets.push({name:'Наличие по складам',cols:[90,320].concat(W.map(function(){return 100;})),rows:sk,header:1});
       xlsBook(sheets,'assortiment_abc_vyborka.xls');
     }else{
       // полный ABC компании за период: без ограничений среза, бренда и таблицы
-      var lo=X.lo,hi=X.hi,sales={};for(var i=0;i<D.tx.length;i++){var t=D.tx[i];if(t[0]<lo||t[0]>hi)continue;sales[t[2]]=(sales[t[2]]||0)+t[4];}
+      var lo=X.lo,hi=X.hi,sales={},qtyF={};for(var i=0;i<D.tx.length;i++){var t=D.tx[i];if(t[0]<lo||t[0]>hi)continue;sales[t[2]]=(sales[t[2]]||0)+t[4];qtyF[t[2]]=(qtyF[t[2]]||0)+t[3];}
       var it=Object.keys(sales).filter(function(k){return sales[k]>0;}).map(function(k){return {k:k,v:sales[k]};}).sort(function(a,b){return b.v-a.v;}),tot=it.reduce(function(s,x){return s+x.v;},0)||1,cum=0;
       it.forEach(function(x){cum+=x.v;x.c=cum/tot<=0.8?'A':(cum/tot<=0.95?'B':'C');});
       sheets.push(xlsParams('Полный ABC компании за период',[['Источник','Продажи по бизнес-регионам, остатки по сериям (1С)'],['Данные актуальны на',xlsRefDate()],['Выгрузка сформирована',xlsDate()],['Период',String(lo).replace(/(\d{4})(\d{2})(\d{2})/,'$3.$2.$1')+' — '+String(hi).replace(/(\d{4})(\d{2})(\d{2})/,'$3.$2.$1')],['База ABC','вся компания, все бренды, без ограничений среза и таблицы'],['Правило ABC',abcRule],['Склады',X.whAll?'все':W.join(', ')],['Строк в листе «Ассортимент»',it.length]]));
       var cnt={A:0,B:0,C:0};it.forEach(function(x){cnt[x.c]++;});
       sheets.push({name:'Сводка ABC',cols:[80,120,120],rows:[['ABC','Всего SKU','Доля выручки'],['A',cnt.A,{v:it.filter(function(x){return x.c==='A';}).reduce(function(s,x){return s+x.v;},0)/tot,s:'p'}],['B',cnt.B,{v:it.filter(function(x){return x.c==='B';}).reduce(function(s,x){return s+x.v;},0)/tot,s:'p'}],['C',cnt.C,{v:it.filter(function(x){return x.c==='C';}).reduce(function(s,x){return s+x.v;},0)/tot,s:'p'}]],header:1,filter:false});
-      var ar2=[['Артикул','Товар','Категория','Бренд','ABC компании','Продажи компании, ₽','Доля в компании'].concat(W.map(function(w){return 'Наличие: '+w;})).concat(['Наличие, итого'])];
-      it.forEach(function(x){var si=D.txSkus[x.k]||['','—',0,''];var st2=stockRow(si[0]);var sum=0,any=false;st2.forEach(function(v){if(v!==''){sum+=v;any=true;}});ar2.push([si[0],si[1],D.txCats[si[2]]||'',si[3]||'',x.c,{v:Math.round(x.v),s:'n'},{v:x.v/tot,s:'p'}].concat(st2).concat([any?sum:'']));});
-      sheets.push({name:'Ассортимент',cols:[90,320,150,90,70,120,90].concat(W.map(function(){return 90;})).concat([90]),rows:ar2,header:1});
+      var ar2=[['Артикул','Товар','Категория','Бренд','ABC компании','Продажи компании, ₽','Доля в компании'].concat(QHDR).concat(W.map(function(w){return 'Наличие: '+w;})).concat(['Наличие, итого'])];
+      it.forEach(function(x){var si=D.txSkus[x.k]||['','—',0,''];var st2=stockRow(si[0]);var sum=0,any=false;st2.forEach(function(v){if(v!==''){sum+=v;any=true;}});ar2.push([si[0],si[1],D.txCats[si[2]]||'',si[3]||'',x.c,{v:Math.round(x.v),s:'n'},{v:x.v/tot,s:'p'}].concat(qtyCells(si[0],qtyF[x.k])).concat(st2).concat([any?sum:'']));});
+      sheets.push({name:'Ассортимент',cols:[90,320,150,90,70,120,90].concat(QHDR.map(function(){return 95;})).concat(W.map(function(){return 90;})).concat([90]),rows:ar2,header:1});
       var sk2=[['Артикул','Товар'].concat(W)];it.forEach(function(x){var si=D.txSkus[x.k]||['','—'];sk2.push([si[0],si[1]].concat(stockRow(si[0])));});
       sheets.push({name:'Наличие по складам',cols:[90,320].concat(W.map(function(){return 100;})),rows:sk2,header:1});
       xlsBook(sheets,'assortiment_abc_polnyy.xls');

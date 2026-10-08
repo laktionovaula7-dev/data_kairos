@@ -937,7 +937,7 @@ def build_krs(S, stock, plan, crm, price):
         ex=expiry.get(art,{})
         exp_q=ex.get('expired',0); soon_q=ex.get('soon',0)
         turn[art]={'dos':(round(dos) if dos is not None else None),'in_stock':inst,
-                   'available':s['available'],'reserved':s.get('reserved',0),'incoming':s.get('incoming',0),
+                   'available':s['available'],'reserved':s.get('reserved',0),'shipping':s.get('shipping',0),'incoming':s.get('incoming',0),
                    'wh':s.get('wh',{}),'company_in_stock':s.get('company_in_stock',0),
                    'sold':round(recent_qty_art.get(art,0)),'frozen':frozen,'name':s['name'],
                    'exp_near':ex.get('nearest'),'exp_days':ex.get('nearest_days'),
