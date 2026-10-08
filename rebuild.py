@@ -1117,7 +1117,16 @@ def inject(KRS):
     _inject_into(TEMPLATE_SRC, OUT, KRS)
     proto_src=ROOT/"Kairos_proto_template.html"
     if proto_src.exists():
-        _inject_into(proto_src, ROOT/"Kairos_dashboard_proto.html", KRS)
+        proto_out=ROOT/"Kairos_dashboard_proto.html"
+        _inject_into(proto_src, proto_out, KRS)
+        # Боевой файл = актуальная версия proto. Держим final в синхроне,
+        # чтобы он никогда не отдавал устаревшие данные (см. «всё сломалось»).
+        try:
+            import shutil as _sh
+            _sh.copyfile(proto_out, TEMPLATE_SRC)
+            print('  [=] Kairos_dashboard_final.html синхронизирован с proto')
+        except Exception as _e:
+            print('  [!] не удалось синхронизировать final.html:',_e)
 
 if __name__=='__main__':
     print("Читаю источники…")
