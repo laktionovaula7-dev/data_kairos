@@ -4323,7 +4323,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
   }
   (function(){try{if(window.__krsTip||!document.body)return;window.__krsTip=1;
     var tip=document.createElement('div');tip.id='krsTip';tip.style.cssText='position:fixed;z-index:9999;pointer-events:none;background:#2A2A2A;color:#fff;font:12px/1.45 Montserrat,system-ui,sans-serif;padding:8px 11px;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.22);max-width:280px;opacity:0;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease;white-space:pre-line';document.body.appendChild(tip);
-    var cur=null;function show(el){var t=el.getAttribute('data-tip');if(!t)return;tip.textContent=t;tip.style.opacity='1';tip.style.transform='translateY(0)';cur=el;try{var pn=el.parentNode;if(pn&&pn.classList&&pn.classList.contains('rumap')){if(el.tagName==='path'){var ov=pn.querySelector('circle,text');if(ov)pn.insertBefore(el,ov);else pn.appendChild(el);}else if(el.tagName==='circle')pn.appendChild(el);}}catch(_){}}
+    var cur=null;function show(el){var t=el.getAttribute('data-tip');if(!t)return;tip.textContent=t;tip.style.opacity='1';tip.style.transform='translateY(0)';cur=el;}
     function hide(){tip.style.opacity='0';tip.style.transform='translateY(4px)';cur=null;}
     document.addEventListener('mouseover',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');if(el)show(el);});
     document.addEventListener('mouseout',function(e){if(cur&&(!e.relatedTarget||(cur.contains&&!cur.contains(e.relatedTarget))))hide();});
