@@ -272,6 +272,47 @@ DOC=('заказ клиента','реализация','корректиров�
 _isdoc=lambda s:any(s.lower().startswith(k) for k in DOC)
 _rx=re.compile(r'от (\d{2})\.(\d{2})\.(\d{4})')
 
+def drop_realizations(rows, lo, hi):
+    """Убирает документы «Реализация … от ДД.ММ.ГГГГ» с датой в [lo,hi] (ггггммдд) вместе с вложенными строками."""
+    out=[]; skip=None
+    for r in rows:
+        lvl,name=r[0],r[1]
+        if skip is not None:
+            if lvl>skip: continue
+            skip=None
+        if name and name.lower().startswith('реализация'):
+            m=_rx.search(name)
+            if m:
+                d=int(m.group(3)+m.group(2)+m.group(1))
+                if lo<=d<=hi: skip=lvl; continue
+        out.append(r)
+    return out
+
+def max_doc_date(rows):
+    """Максимальная дата РЕАЛИЗАЦИИ (ггггммдд) в сырых строках продаж (заказы не считаем: они бывают датированы позже)."""
+    mx=0
+    for r in rows:
+        if r[1] and r[1].lower().startswith('реализация'):
+            m=_rx.search(r[1])
+            if m:
+                d=int(m.group(3)+m.group(2)+m.group(1))
+                if d>mx: mx=d
+    return mx or None
+
+def day_file_period(path):
+    """Период из шапки отчёта 1С: «Период: 09.10.2026 - 09.10.2026» -> (20261009, 20261009)."""
+    import openpyxl
+    try:
+        wb=openpyxl.load_workbook(path,read_only=True,data_only=True); ws=wb[wb.sheetnames[0]]
+        for i,v in enumerate(ws.iter_rows(min_row=1,max_row=8,values_only=True)):
+            for c in v:
+                if isinstance(c,str):
+                    m=re.search(r'Период:\s*(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(\d{2})\.(\d{2})\.(\d{4})',c)
+                    if m: wb.close(); return (int(m.group(3)+m.group(2)+m.group(1)),int(m.group(6)+m.group(5)+m.group(4)))
+        wb.close()
+    except Exception as e: print('  [!] период дневного файла:',e)
+    return None
+
 def filter_year(rows, keep):
     """Оставляет только документы верхнего уровня, чья дата (год) входит в keep.
     Структурные заголовки (регион/субъект/город/компания) сохраняются; поддерево
@@ -1255,8 +1296,15 @@ if __name__=='__main__':
     if F_SALES_CUR.exists():
         rows+=filter_year(load_sales_rows(F_SALES_CUR, CACHE_CUR), {2026})
         print(f"  слияние: 2024-2025 из истории + 2026 из свежего файла ({F_SALES_CUR.name})")
-        # дневной файл («Продажи за ДД.ММ») не догружаем: он датируется по дате заказа и не сдвигает период —
-        # для обновления продаж нужен ПОЛНЫЙ файл за 01.01.2026–<дата> (как «продажи 08.10»).
+        # дневные файлы («Продажи за ДД.ММ.xlsx»): продажи считаем ПО РЕАЛИЗАЦИЯМ. Файл дня считается эталоном для своих дат:
+        # реализации этих дат вырезаем из накопленного файла (там день может быть неполным) и добавляем день целиком — без задвоения.
+        for _df in sorted(DATA.glob("Продажи за *.xlsx")) if DATA.exists() else []:
+            _pd=day_file_period(_df)
+            if not _pd: print(f"  [!] {_df.name}: не нашёл период в шапке — пропущен"); continue
+            _n0=len(rows); rows=drop_realizations(rows,_pd[0],_pd[1])
+            _dr=filter_year(load_sales_rows(_df, ROOT/"work"/("_sales_rows_day_"+re.sub(r'\W','_',_df.stem)+".pkl")), {2026})
+            rows+=_dr
+            print(f"  + дневной файл {_df.name}: период {_pd[0]}–{_pd[1]}; из накопленного вырезано строк {_n0-len(rows)+len(_dr)}, добавлено {len(_dr)}")
     else:
         rows+=filter_year(load_sales_rows(F_SALES, CACHE), {2026})
         print("  [!] свежего файла 2026 нет — 2026 взято из полной истории")
