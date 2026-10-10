@@ -377,6 +377,17 @@ def parse_sales(rows, price):
                             if ns>1: inwork.append({'client':comp_name,'order':name.split('от')[0].replace('Заказ клиента','').strip(),
                                 'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",'ordered':round(nt or 0),
                                 'shipped':round(shipped),'not_shipped':round(ns)})
+            else:
+                # вложенный документ (Реализация под Заказом): датируем продажи ПО РЕАЛИЗАЦИИ,
+                # а клиента/регион/филиал/канал/номер наследуем от родительского заказа
+                base=cur_ord()
+                if base:
+                    m2=_rx.search(name)
+                    di2=int(f"{m2.group(3)}{m2.group(2)}{m2.group(1)}") if m2 else base[0]
+                    iso2=f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}" if m2 else base[1]
+                    orderStack[lvl]=(di2,iso2,base[2],base[3],base[4],base[5],base[6],base[7])
+                    if di2>maxdate: maxdate=di2
+                    if iso2 and iso2>client_last[base[4]]: client_last[base[4]]=iso2
             continue
         nxt=rows[i+1][0] if i+1<n else -1
         if nxt>lvl: continue
