@@ -33,6 +33,7 @@ F_STOCK= _pick(DATA/"остатки по сериям 09.10.xlsx", DATA/"Ост�
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
+F_GEOFILL=_pick(DATA/"Города_Битрикс.xlsx", ROOT/"Города_Битрикс.xlsx")   # компании без города: город по Битрикс / ЕГРЮЛ (колонки «Город в Битрикс», «Город / населенный пункт»)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
 F_TRACK= _pick(DATA/"в пути 09.10.xlsx", DATA/"в пути и в производстве.xlsx",
@@ -64,6 +65,34 @@ MANUAL_CLIENT_GEO = {
     'слк ооо':                     ('Дальневосточный ФО','Владивосток','Республика Бурятия','Улан-Удэ'),
 }
 MN=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
+
+def load_geofill():
+    """Файл «Города_Битрикс.xlsx»: nrm(компания) -> (город, субъект). Приоритет: город из Битрикс (сверка «Город найден»), затем город из ЕГРЮЛ."""
+    import openpyxl
+    if not F_GEOFILL.exists(): return {}
+    out={}
+    try:
+        wb=openpyxl.load_workbook(F_GEOFILL,read_only=True,data_only=True); ws=wb[wb.sheetnames[0]]
+        rows=list(ws.iter_rows(values_only=True)); wb.close()
+        H=[str(c or '').strip().lower() for c in rows[0]]
+        ix=lambda name:next((i for i,h in enumerate(H) if h==name.lower()),None)
+        iC,iBc,iBr,iEc,iEr,iSubj=ix('Компания'),ix('Город в Битрикс'),ix('Результат сверки с Битрикс'),ix('Город / населенный пункт'),ix('Регион по источнику'),ix('Регион (субъект)')
+        g=lambda r,i:(str(r[i]).strip() if i is not None and len(r)>i and r[i] not in (None,'') else '')
+        BAD={'беларусь','республика беларусь','казахстан','кыргызстан'}
+        for r in rows[1:]:
+            nm=g(r,iC)
+            if not nm: continue
+            city=''
+            if g(r,iBr)=='Город найден' and g(r,iBc).lower() not in BAD: city=g(r,iBc)
+            if not city:
+                ec=g(r,iEc)
+                if ec: city=ec.title() if ec.isupper() else ec
+            if not city: continue
+            subj=g(r,iEr) or g(r,iSubj)
+            out[nrm(nm)]=(city,subj)
+    except Exception as e:
+        print('  [!] файл городов (Битрикс/ЕГРЮЛ):',e)
+    return out
 
 def nrm(s):
     s=str(s or '').lower().strip().replace('ё','е')
@@ -891,6 +920,15 @@ def build_krs(S, stock, plan, crm, price):
     for nm in list(cReg):
         _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
         if _mg: cSubj[nm]=_mg[2]; cCity[nm]=_mg[3]
+    # дозаполнение города/субъекта у клиентов без города — из файла Битрикс/ЕГРЮЛ
+    _gf=load_geofill(); _gfn=0
+    for nm in list(cReg):
+        if cCity.get(nm): continue
+        _g=_gf.get(nrm(nm))
+        if _g:
+            cCity[nm]=_g[0]; _gfn+=1
+            if _g[1] and not cSubj.get(nm): cSubj[nm]=_g[1]
+    if _gf: print(f"  города из файла Битрикс/ЕГРЮЛ: дозаполнено {_gfn} из {len(_gf)}")
     # ---- конфликты: менеджер (список≠CRM), нет ИНН, нет CRM по ИНН ----
     conflicts=[]
     for nm in cReg:
