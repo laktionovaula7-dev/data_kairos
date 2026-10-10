@@ -27,15 +27,15 @@ def _pick(*cands):
     return Path(cands[0])
 # Продажи: полная история (2024-2026) — из неё берём только 2024-2025; свежий файл — 2026 до актуальной даты
 F_SALES= _pick(DATA/"Продажи по бизнес регионам 24г-26г.xlsx", ROOT/"Продажи по бизнес регионам 24г-26г.xlsx")
-F_SALES_CUR=_pick(DATA/"продажи 08.10.xlsx", DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # свежий 2026
-F_STOCK= _pick(DATA/"Остатки 08.10.xlsx", DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
+F_SALES_CUR=_pick(DATA/"продажи 09.10.xlsx", DATA/"продажи 08.10.xlsx", DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # накопленный 2026 (полный период 01.01–<дата>)
+F_STOCK= _pick(DATA/"остатки по сериям 09.10.xlsx", DATA/"Остатки 08.10.xlsx", DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
                DATA/"Остатки и доступность по сериям.xlsx", ROOT/"Остатки и доступность по сериям.xlsx")
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
-F_TRACK= _pick(DATA/"в пути и в производстве.xlsx",
+F_TRACK= _pick(DATA/"в пути 09.10.xlsx", DATA/"в пути и в производстве.xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления.xlsx")
 
@@ -508,22 +508,23 @@ def load_tracking(price):
         return 'Прочее'
     wb=openpyxl.load_workbook(F_TRACK,read_only=True,data_only=True)
     ws=wb[wb.sheetnames[0]]; allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
-    # --- колонки по заголовку (устойчиво к смене раскладки) ---
-    C={'name':8,'art':6,'qty':11,'port':3,'ktk':4,'eta':5}   # дефолт = формат «в пути и в производстве»
-    hrow=next((rr for rr in allrows[:14] if any(isinstance(c,str) and c.lower().strip().startswith('артикул') for c in rr)),None)
+    # --- колонки по заголовку (устойчиво к смене раскладки; артикул может отсутствовать) ---
+    C={'name':8,'art':None,'qty':11,'port':3,'ktk':4,'eta':5}
+    # строка-заголовок = та, где ячейка РОВНО «Номенклатура» (не путать с параметрами «…из списка номенклатуры»)
+    hrow=next((rr for rr in allrows[:16] if any(isinstance(c,str) and c.strip().lower()=='номенклатура' for c in rr)),None)
     if hrow:
         for i,c in enumerate(hrow):
             if not isinstance(c,str): continue
-            t=c.lower().strip()
-            if t.startswith('артикул'): C['art']=i
-            elif 'номенклат' in t: C['name']=i
+            t=c.strip().lower()
+            if t=='номенклатура': C['name']=i
+            elif t.startswith('артикул'): C['art']=i
             elif 'порт' in t: C['port']=i
             elif 'ктк' in t: C['ktk']=i
             elif t.startswith('дата поступления') and 'ктк' not in t: C['eta']=i
-    qrow=next((rr for rr in allrows[:14] if any(isinstance(c,str) and 'поступит' in c.lower() for c in rr)),None)
+    qrow=next((rr for rr in allrows[:16] if any(isinstance(c,str) and c.strip().lower()=='поступит' for c in rr)),None)
     if qrow:
         for i,c in enumerate(qrow):
-            if isinstance(c,str) and 'поступит' in c.lower(): C['qty']=i
+            if isinstance(c,str) and c.strip().lower()=='поступит': C['qty']=i
     stack={}; agg={}
     for r,row in enumerate(allrows,1):
         if r<11: continue
@@ -545,7 +546,7 @@ def load_tracking(price):
         nm=str(name).strip()
         m=re.search(r'от (\d{2}\.\d{2}\.20\d{2})',doc); od=m.group(1) if m else ''
         port=_d(g(C['port'])); ktk=_d(g(C['ktk'])); eta=_d(g(C['eta']))
-        _artf=g(C['art'])  # артикул из файла слежения
+        _artf=g(C['art']) if C['art'] is not None else None  # артикул из файла слежения (если колонка есть)
         cat,art=cat_art(nm,price); br=brand_of(nm,price)
         art=(str(_artf).strip() if _artf not in (None,'') else '') or art   # приоритет артикула из слежения
         key=(art or nm, _dest(wh), status, eta or '', port or '', ktk or '', od)
@@ -1195,6 +1196,8 @@ if __name__=='__main__':
     if F_SALES_CUR.exists():
         rows+=filter_year(load_sales_rows(F_SALES_CUR, CACHE_CUR), {2026})
         print(f"  слияние: 2024-2025 из истории + 2026 из свежего файла ({F_SALES_CUR.name})")
+        # дневной файл («Продажи за ДД.ММ») не догружаем: он датируется по дате заказа и не сдвигает период —
+        # для обновления продаж нужен ПОЛНЫЙ файл за 01.01.2026–<дата> (как «продажи 08.10»).
     else:
         rows+=filter_year(load_sales_rows(F_SALES, CACHE), {2026})
         print("  [!] свежего файла 2026 нет — 2026 взято из полной истории")
