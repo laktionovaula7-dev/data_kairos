@@ -27,15 +27,16 @@ def _pick(*cands):
     return Path(cands[0])
 # Продажи: полная история (2024-2026) — из неё берём только 2024-2025; свежий файл — 2026 до актуальной даты
 F_SALES= _pick(DATA/"Продажи по бизнес регионам 24г-26г.xlsx", ROOT/"Продажи по бизнес регионам 24г-26г.xlsx")
-F_SALES_CUR=_pick(DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # свежий 2026 (01.01.26-05.10.26)
-F_STOCK= _pick(DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
+F_SALES_CUR=_pick(DATA/"продажи 09.10.xlsx", DATA/"продажи 08.10.xlsx", DATA/"Продажи по Бизнес регионам 01.01.26-05.10.26.xlsx")   # накопленный 2026 (полный период 01.01–<дата>)
+F_STOCK= _pick(DATA/"остатки по сериям 09.10.xlsx", DATA/"Остатки 08.10.xlsx", DATA/"Остатки и доступность товаров (по сериям) 05.10.xlsx",
                DATA/"Остатки и доступность по сериям.xlsx", ROOT/"Остатки и доступность по сериям.xlsx")
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
-F_TRACK= _pick(DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
+F_TRACK= _pick(DATA/"в пути 09.10.xlsx", DATA/"в пути и в производстве.xlsx",
+               DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления.xlsx")
 
 def _find_client_inn():
@@ -51,8 +52,17 @@ CUR_YEAR, PREV_YEAR = 2026, 2025
 TURN_WINDOW_DAYS = 90          # окно для оборачиваемости (DOS)
 
 # Правило: исключаем ВСЕ компании с нулевыми (и отрицательными) продажами.
-# Явный список имён не ведём — служебные/тестовые записи и так без продаж и отсекаются сами.
-EXCLUDE_CLIENTS_RAW = []
+# Служебные записи (сотрудники компании) — исключаем из клиентской аналитики.
+EXCLUDE_CLIENTS_RAW = ['Евгений Тихонов','Бурилова Валерия Викторовна']
+# Ручная привязка нераспределённых клиентов: nrm(имя) -> (регион, филиал, субъект, город).
+# Менеджер проставляется автоматически по региону (OKRUG_MGR): ЦФО→Сидоров, ДВФО→Федотов.
+MANUAL_CLIENT_GEO = {
+    'дементиенко роза гиясовна':   ('Дальневосточный ФО','Владивосток','Амурская область','Тында'),
+    'фастрост ооо':                ('Центральный ФО','Москва','Ярославская область','Ярославль'),
+    'гробман евгений борисович':   ('Дальневосточный ФО','Владивосток','Забайкальский край','Чита'),
+    'богатыренко эдуард сергеевич':('Центральный ФО','Москва','Калужская область','Кондрово'),
+    'слк ооо':                     ('Дальневосточный ФО','Владивосток','Республика Бурятия','Улан-Удэ'),
+}
 MN=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек']
 
 def nrm(s):
@@ -367,6 +377,17 @@ def parse_sales(rows, price):
                             if ns>1: inwork.append({'client':comp_name,'order':name.split('от')[0].replace('Заказ клиента','').strip(),
                                 'date':f"{m.group(1)}.{m.group(2)}.{m.group(3)}",'ordered':round(nt or 0),
                                 'shipped':round(shipped),'not_shipped':round(ns)})
+            else:
+                # вложенный документ (Реализация под Заказом): датируем продажи ПО РЕАЛИЗАЦИИ,
+                # а клиента/регион/филиал/канал/номер наследуем от родительского заказа
+                base=cur_ord()
+                if base:
+                    m2=_rx.search(name)
+                    di2=int(f"{m2.group(3)}{m2.group(2)}{m2.group(1)}") if m2 else base[0]
+                    iso2=f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}" if m2 else base[1]
+                    orderStack[lvl]=(di2,iso2,base[2],base[3],base[4],base[5],base[6],base[7])
+                    if di2>maxdate: maxdate=di2
+                    if iso2 and iso2>client_last[base[4]]: client_last[base[4]]=iso2
             continue
         nxt=rows[i+1][0] if i+1<n else -1
         if nxt>lvl: continue
@@ -428,27 +449,43 @@ def load_stock():
         return 'Прочее'
     wb=openpyxl.load_workbook(F_STOCK,read_only=True,data_only=True); ws=wb['Лист_1']
     num=lambda x:(x if isinstance(x,(int,float)) else 0)
+    allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
+    # --- колонки определяем по заголовку (устойчиво к смене раскладки выгрузки 1С) ---
+    COL={'art':0,'name':3,'unit':6,'in':7,'ship':8,'res':9,'avail':10}   # дефолт = формат «Остатки 08.10»
+    hdr=next((rr for rr in allrows[:16] if any(isinstance(c,str) and 'в наличии' in c.lower() for c in rr)),None)
+    if hdr:
+        for i,c in enumerate(hdr):
+            if not isinstance(c,str): continue
+            t=c.lower().strip()
+            if t.startswith('артикул'): COL['art']=i
+            elif 'номенклат' in t: COL['name']=i
+            elif 'ед. изм' in t: COL['unit']=i
+            elif 'в наличии' in t: COL['in']=i
+            elif 'отгружа' in t: COL['ship']=i
+            elif 'в резерв' in t: COL['res']=i
+            elif 'доступно' in t: COL['avail']=i
     # opt = по продажному складу (для оборачиваемости); comp/wh = по ВСЕМ складам (для «Всего доступно»)
     agg=defaultdict(lambda:{'name':'','in_stock':0.0,'shipping':0.0,'reserved':0.0,'available':0.0,'incoming':0.0,
                             'company':0.0,'wh':defaultdict(float)})
-    cur_sklad=None; r=0
-    for v in ws.iter_rows(min_row=1,values_only=True):
-        r+=1
-        c0=v[0] if len(v)>0 else None; c2=v[2] if len(v)>2 else None; c5=v[5] if len(v)>5 else None
-        isart=bool(c0 and c2 and c5)                       # строка артикула: код + наименование + ед.изм
+    cur_sklad=None
+    for r,v in enumerate(allrows,1):
+        g=lambda i:(v[i] if len(v)>i else None)
+        c0=g(COL['art']); nmc=g(COL['name']); unc=g(COL['unit'])
+        isart=bool(c0 and nmc and unc)                     # строка артикула: код + наименование + ед.изм
         if c0 and not isart:                               # заголовок (склад/серия)
             if levels.get(r,0)==0: cur_sklad=str(c0).strip()
             continue
         if isart:
-            a=str(c0).strip(); d=agg[a];
-            if not d['name']: d['name']=str(c2).strip()
-            q7=num(v[7])
+            a=str(c0).strip()
+            if a.lower()=='артикул' or str(nmc).strip().lower()=='номенклатура': continue  # строка-заголовок
+            d=agg[a];
+            if not d['name']: d['name']=str(nmc).strip()
+            q7=num(g(COL['in']))
             d['company']+=q7                               # все склады
             if q7: d['wh'][wh_bucket(cur_sklad)]+=q7
             if cur_sklad==STOCK_WAREHOUSE:                 # только продажный склад
-                d['in_stock']+=q7; d['shipping']+=num(v[8]); d['reserved']+=num(v[9])
-                d['available']+=num(v[10]); d['incoming']+=num(v[11])
-    wb.close()
+                d['in_stock']+=q7; d['shipping']+=num(g(COL['ship'])); d['reserved']+=num(g(COL['res']))
+                d['available']+=num(g(COL['avail']))       # «в пути/в производстве» теперь из файла слежения (load_tracking)
     stock={a:{'name':d['name'],'in_stock':round(d['in_stock'],1),'shipping':round(d['shipping'],1),
               'reserved':round(d['reserved'],1),'available':round(d['available'],1),
               'incoming':round(d['incoming'],1),'company_in_stock':round(d['company'],1),
@@ -481,11 +518,29 @@ def load_tracking(price):
         if 'мск' in n or 'москва' in n: return 'Москва'
         return 'Прочее'
     wb=openpyxl.load_workbook(F_TRACK,read_only=True,data_only=True)
-    ws=wb[wb.sheetnames[0]]; stack={}; agg={}; r=0
-    for row in ws.iter_rows(min_row=1,values_only=True):
-        r+=1
+    ws=wb[wb.sheetnames[0]]; allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
+    # --- колонки по заголовку (устойчиво к смене раскладки; артикул может отсутствовать) ---
+    C={'name':8,'art':None,'qty':11,'port':3,'ktk':4,'eta':5}
+    # строка-заголовок = та, где ячейка РОВНО «Номенклатура» (не путать с параметрами «…из списка номенклатуры»)
+    hrow=next((rr for rr in allrows[:16] if any(isinstance(c,str) and c.strip().lower()=='номенклатура' for c in rr)),None)
+    if hrow:
+        for i,c in enumerate(hrow):
+            if not isinstance(c,str): continue
+            t=c.strip().lower()
+            if t=='номенклатура': C['name']=i
+            elif t.startswith('артикул'): C['art']=i
+            elif 'порт' in t: C['port']=i
+            elif 'ктк' in t: C['ktk']=i
+            elif t.startswith('дата поступления') and 'ктк' not in t: C['eta']=i
+    qrow=next((rr for rr in allrows[:16] if any(isinstance(c,str) and c.strip().lower()=='поступит' for c in rr)),None)
+    if qrow:
+        for i,c in enumerate(qrow):
+            if isinstance(c,str) and c.strip().lower()=='поступит': C['qty']=i
+    stack={}; agg={}
+    for r,row in enumerate(allrows,1):
         if r<11: continue
-        L=lv.get(r,0); a=row[0] if len(row)>0 else None; name=row[6] if len(row)>6 else None
+        g=lambda i:(row[i] if len(row)>i else None)
+        L=lv.get(r,0); a=g(0); name=g(C['name'])
         if a is not None and name is None:
             stack[L]=str(a).strip()
             for k in [x for x in list(stack) if x>L]: stack.pop(k,None)
@@ -496,18 +551,19 @@ def load_tracking(price):
         wh=stack.get(0,'') or ''; wl=wh.lower()
         status='В производстве' if wl.startswith('в производстве') else ('В пути' if wl.startswith('в пути') else 'Поступил')
         if status=='Поступил': continue   # уже на адресном складе — учитывается в остатках
-        try: qty=float(row[10]) if len(row)>10 and row[10] not in (None,'') else 0
+        try: qty=float(g(C['qty'])) if g(C['qty']) not in (None,'') else 0
         except (TypeError,ValueError): qty=0
         if qty<=0: continue
         nm=str(name).strip()
         m=re.search(r'от (\d{2}\.\d{2}\.20\d{2})',doc); od=m.group(1) if m else ''
-        port=_d(row[2] if len(row)>2 else None); ktk=_d(row[4] if len(row)>4 else None); eta=_d(row[5] if len(row)>5 else None)
+        port=_d(g(C['port'])); ktk=_d(g(C['ktk'])); eta=_d(g(C['eta']))
+        _artf=g(C['art']) if C['art'] is not None else None  # артикул из файла слежения (если колонка есть)
         cat,art=cat_art(nm,price); br=brand_of(nm,price)
+        art=(str(_artf).strip() if _artf not in (None,'') else '') or art   # приоритет артикула из слежения
         key=(art or nm, _dest(wh), status, eta or '', port or '', ktk or '', od)
         if key in agg: agg[key]['qty']+=qty
         else: agg[key]={'name':nm,'art':art or '','brand':br,'cat':group_cat(cat,br,nm),
             'qty':qty,'status':status,'dest':_dest(wh),'wh':wh,'order':od,'port':port,'ktk':ktk,'eta':eta}
-    wb.close()
     out=[dict(v,qty=round(v['qty'])) for v in agg.values()]
     out.sort(key=lambda x:(x['eta'] or '9999',x['status']))
     nprod=sum(1 for o in out if o['status']=='В производстве'); ntr=sum(1 for o in out if o['status']=='В пути')
@@ -616,7 +672,7 @@ def _parse_crm_file(path):
         out.append(rec)
     return out
 
-def load_crm(client_names):
+def load_crm(client_names, cinn=None):
     files=_crm_files()
     if not files: print("  CRM: файлы не найдены (папка Регионы)"); return {}
     recs=[]
@@ -626,14 +682,17 @@ def load_crm(client_names):
         for r in rr: r['_okrug']=ok
         recs+=rr
     # индекс: нормализованное имя -> запись (имя + юр.наименования + ФИО ИП)
-    idx={}
+    idx={}; inn_idx={}
     for rec in recs:
         fio=' '.join(x for x in [rec.get('fam',''),rec.get('im',''),rec.get('ot','')] if x).strip()
         for x in [rec.get('name',''),rec.get('nameShort',''),rec.get('nameFull',''),fio]:
             k=_cnorm(x)
             if k and k not in idx: idx[k]=rec
+        _ri=re.sub(r'\D','',str(rec.get('inn','')))
+        if _ri and _ri not in inn_idx: inn_idx[_ri]=rec
     tokidx=[(set(k.split()),rec) for k,rec in idx.items()]
     cid=lambda n:'c_'+re.sub(r'[^a-zа-я0-9]','',n.lower())[:20]
+    cinn=cinn or {}; byInn=0
     out={}; matched=0
     for name in client_names:
         k=_cnorm(name); rec=idx.get(k)
@@ -641,6 +700,9 @@ def load_crm(client_names):
             ts=set(k.split())
             for kt2,rr in tokidx:
                 if ts and (ts<=kt2 or kt2<=ts): rec=rr; break
+        if not rec:                                   # по названию не нашли — пробуем по ИНН из справочника
+            _ci=re.sub(r'\D','',str(cinn.get(nrm(name),'')))
+            if _ci and inn_idx.get(_ci): rec=inn_idx[_ci]; byInn+=1
         if not rec: continue
         matched+=1
         phones=', '.join(x for x in [rec['phone1'],rec['phone2']] if x)
@@ -651,7 +713,7 @@ def load_crm(client_names):
             'site':rec['site'],'responsible':rec['responsible'],'category':rec['category'],
             'employees':rec['employees'],'contractNo':rec['contractNo'],'contractDate':rec['contractDate'],
             'bank':rec['bank'],'crmId':rec['id'],'okrug':rec.get('_okrug','')}
-    print(f"  CRM: файлов {len(files)}, компаний {len(recs)}, сматчено {matched}/{len(client_names)}")
+    print(f"  CRM: файлов {len(files)}, компаний {len(recs)}, сматчено {matched}/{len(client_names)} (из них по ИНН: {byInn})")
     return out
 
 # ---------------- ПЛАН (25/26, помесячно) ----------------
@@ -784,6 +846,12 @@ def build_krs(S, stock, plan, crm, price):
             rc=crm_of(nm); ok=(rc or {}).get('okrug','')
             if ok in CRM_OKRUG:
                 cReg[nm],cFil[nm]=CRM_OKRUG[ok]; filled+=1
+    # ручная привязка нераспределённых (регион/филиал); менеджер далее по региону
+    _man_filled=0
+    for nm in list(cReg):
+        _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
+        if _mg: cReg[nm],cFil[nm]=_mg[0],_mg[1]; _man_filled+=1
+    if _man_filled: print(f"  ручная привязка региона: {_man_filled}")
     SNG_REG={'Беларусь','Казахстан','Кыргызстан','СНГ'}
     def bucket(nm):
         if cChan.get(nm)=='СЕТИ': return 'Сети'
@@ -810,6 +878,9 @@ def build_krs(S, stock, plan, crm, price):
         else: cMgr[nm]='Не назначен'
     # ---- город/субъект по клиенту (ИЗ ПРОДАЖ: округ→субъект→город) ----
     cCity=dict(S.get('clientCity',{})); cSubj=dict(S.get('clientSubject',{}))
+    for nm in list(cReg):
+        _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
+        if _mg: cSubj[nm]=_mg[2]; cCity[nm]=_mg[3]
     # ---- конфликты: менеджер (список≠CRM), нет ИНН, нет CRM по ИНН ----
     conflicts=[]
     for nm in cReg:
@@ -878,7 +949,7 @@ def build_krs(S, stock, plan, crm, price):
         ex=expiry.get(art,{})
         exp_q=ex.get('expired',0); soon_q=ex.get('soon',0)
         turn[art]={'dos':(round(dos) if dos is not None else None),'in_stock':inst,
-                   'available':s['available'],'reserved':s.get('reserved',0),'incoming':s.get('incoming',0),
+                   'available':s['available'],'reserved':s.get('reserved',0),'shipping':s.get('shipping',0),'incoming':s.get('incoming',0),
                    'wh':s.get('wh',{}),'company_in_stock':s.get('company_in_stock',0),
                    'sold':round(recent_qty_art.get(art,0)),'frozen':frozen,'name':s['name'],
                    'exp_near':ex.get('nearest'),'exp_days':ex.get('nearest_days'),
@@ -1012,7 +1083,8 @@ def build_krs(S, stock, plan, crm, price):
             'days':days})
         # months/categories/abc/recommended пересчитывает clientByPeriod из tx при открытии карточки —
         # в статике держим только лёгкую основу (иначе файл раздувается на мегабайты).
-        clientDetail[cid]={'name':name,'manager':reg,'region':reg,'city':'—','segment':'—','status':st,
+        _city=(cCity.get(name) or '').strip() or ((crm_of(name) or {}).get('city') or '').strip() or '—'
+        clientDetail[cid]={'name':name,'manager':reg,'region':reg,'city':_city,'segment':'—','status':st,
             'sales':round(rev_cur),'units':qty,'orders':ordn,'avgOrder':round(rev_cur/ordn) if ordn else 0,
             'last':last.replace('-','.') if last else '—','growth':grow(rev_cur,S['clientYear'].get(name,{}).get(PREV,0)),
             'discount':None,'brands':[{'name':'HeadRock','sales':round(rev_cur),'share':100}],'months':[],
@@ -1056,6 +1128,11 @@ def build_krs(S, stock, plan, crm, price):
     # Контур.Фокус: ИНН по клиенту (имя из 1С — только ключ к справочнику; далее всё по ИНН); _cinn/_kont уже загружены выше
     clientInn={cn:_cinn[nrm(cn)] for cn in S['client_net'] if nrm(cn) in _cinn}
     print(f"  Контур: ИНН сопоставлен {len(clientInn)} клиентам из {len(S['client_net'])}")
+    # транзакции исключённых клиентов (сотрудники из EXCLUDE_CLIENTS_RAW) не отдаём на фронт —
+    # иначе страница «Менеджеры и клиенты» (считает из tx) снова их показывает
+    _drop_ci={ix for ix,nm in enumerate(S['tx_clients']) if _cnorm(nm) in _exc}
+    _tx_out=[t for t in S['tx'] if t[1] not in _drop_ci] if _drop_ci else S['tx']
+    if _drop_ci: print(f"  tx: убрано строк исключённых клиентов {len(S['tx'])-len(_tx_out)}")
     KRS={
       'meta':{'prototype':True,'note':f'Пересобрано rebuild.py из актуальных Excel. Вся компания, {CUR} (АППГ {PREV}).',
         'sourceCoverage':{'period':f'{CUR} (АППГ {PREV})','scope':'Вся компания / все бренды',
@@ -1072,7 +1149,7 @@ def build_krs(S, stock, plan, crm, price):
       'abcDetail':{'counts':{'A':len(A),'B':len(B),'C':len(C)},'revenue':{k:round(v) for k,v in rev_by.items()},
         'revenue_share':{k:round(v/(tot_rev or 1)*100,1) for k,v in rev_by.items()},'total_rev':round(tot_rev),
         'total_sku':len(catalog),'nclients':nclients,'a_list':a_list,'reserve':reserve},
-      'tx':S['tx'],'txClients':S['tx_clients'],'txCats':S['tx_cats'],'txSkus':S['tx_skus'],'catTotal':dict(cat_total),
+      'tx':_tx_out,'txClients':S['tx_clients'],'txCats':S['tx_cats'],'txSkus':S['tx_skus'],'catTotal':dict(cat_total),
       'ym':S['yearMonth'],'ymGross':S['ymGross'],'ymRet':S['ymRet'],'geoRef':load_geo(),'ruMap':load_rumap(),
       'regionsData':regionsData,'clientRegion':clientRegion,'foreignRegions':foreign or ['Беларусь'],
       'clientFilial':cFil,'clientChannel':cChan,'clientManager':cMgr,'clientCity':cCity,'clientSubject':cSubj,'salesFilial':salesFilial,'salesFilial3':salesFilial3,
@@ -1111,7 +1188,16 @@ def inject(KRS):
     _inject_into(TEMPLATE_SRC, OUT, KRS)
     proto_src=ROOT/"Kairos_proto_template.html"
     if proto_src.exists():
-        _inject_into(proto_src, ROOT/"Kairos_dashboard_proto.html", KRS)
+        proto_out=ROOT/"Kairos_dashboard_proto.html"
+        _inject_into(proto_src, proto_out, KRS)
+        # Боевой файл = актуальная версия proto. Держим final в синхроне,
+        # чтобы он никогда не отдавал устаревшие данные (см. «всё сломалось»).
+        try:
+            import shutil as _sh
+            _sh.copyfile(proto_out, TEMPLATE_SRC)
+            print('  [=] Kairos_dashboard_final.html синхронизирован с proto')
+        except Exception as _e:
+            print('  [!] не удалось синхронизировать final.html:',_e)
 
 if __name__=='__main__':
     print("Читаю источники…")
@@ -1121,6 +1207,8 @@ if __name__=='__main__':
     if F_SALES_CUR.exists():
         rows+=filter_year(load_sales_rows(F_SALES_CUR, CACHE_CUR), {2026})
         print(f"  слияние: 2024-2025 из истории + 2026 из свежего файла ({F_SALES_CUR.name})")
+        # дневной файл («Продажи за ДД.ММ») не догружаем: он датируется по дате заказа и не сдвигает период —
+        # для обновления продаж нужен ПОЛНЫЙ файл за 01.01.2026–<дата> (как «продажи 08.10»).
     else:
         rows+=filter_year(load_sales_rows(F_SALES, CACHE), {2026})
         print("  [!] свежего файла 2026 нет — 2026 взято из полной истории")
@@ -1128,7 +1216,8 @@ if __name__=='__main__':
     S=parse_sales(rows,price)
     stock=load_stock()
     plan=load_plan()
-    crm=load_crm(list(S['client_net'].keys()))
+    _cinn_main,_=load_kontur()
+    crm=load_crm(list(S['client_net'].keys()),_cinn_main)
     print(f"  ИТОГО нетто: {S['company']['net']:,.0f} | клиентов: {len(S['client_net'])} | tx: {len(S['tx'])}")
     print(f"  бренды: "+", ".join(f"{k} {v:,.0f}" for k,v in sorted(S['byBrand'].items(),key=lambda x:-x[1])))
     print(f"  регионы: "+", ".join(f"{k} {v:,.0f}" for k,v in sorted(S['regSales'].items(),key=lambda x:-x[1])))
@@ -1136,17 +1225,35 @@ if __name__=='__main__':
     print("Собираю модель…")
     KRS=build_krs(S,stock,plan,crm,price)
     KRS['incoming']=load_tracking(price)
-    # таксономия товаров: артикул -> [группа, подгруппа] (подгруппа = категория прайса)
-    _tax={}; _tree={}
+    # таксономия товаров: артикул -> [группа, подгруппа]
+    # подгруппа = категория прайса; если артикула нет в прайсе — берём категорию товара из модели (txCats),
+    # чтобы продаваемые позиции вне прайса (напр. KRONbuild Smart) не падали в «Прочее».
+    _priceCat={}
     for _k,_v in price.items():
         if _k=='__art_price__' or not isinstance(_v,tuple): continue
-        _art,_nm,_br,_c=_v
-        if not _art: continue
-        _g=group_of(_c,_br); _s=_c or '—'
-        _tax[_art]=[_g,_s]; _tree.setdefault(_g,{})[_s]=1
+        if _v[0]: _priceCat[_v[0]]=_v[3]
+    _tax={}; _tree={}
+    _txc=KRS.get('txCats',[]); _nopr=0
+    for _sk in KRS.get('txSkus',[]):
+        _art=_sk[0] if _sk else None
+        if not _art or _art=='—': continue
+        _br=_sk[3] or 'HeadRock'; _catM=_txc[_sk[2]] if (_sk[2] is not None and _sk[2]<len(_txc)) else ''
+        _raw=_priceCat.get(_art) or _catM or ''
+        if _art not in _priceCat: _nopr+=1
+        _g=group_of(_raw,_br)
+        if _g=='Прочее':                       # нет категории — пробуем по названию (шуруп/дюбель→Крепёж и т.п.)
+            _g2=group_of(_sk[1] or '',_br)
+            if _g2!='Прочее': _g=_g2
+        if _br in ('KRONbuild','ENKI'):
+            _s=_g                                           # цельные линейки (пены/герметики/клеи/ЛКМ/крепёж/уплотнители) — без подгрупп
+        else:
+            _s=re.sub(r'\s*\([^)]*\)','',_raw).strip() or _raw or '—'   # HeadRock: схлопываем размеры/варианты в скобках
+        _tax[_art]=[_g,_s]
+        _tree.setdefault(_g,{})                              # группа всегда в дереве
+        if _s and _s!=_g: _tree[_g][_s]=1                    # подгруппы — только реальные
     KRS['tax']=_tax
     KRS['groupTree']={_g:sorted(_tree[_g].keys()) for _g in _tree}
-    print('  таксономия: групп %d, подгрупп %d, артикулов %d'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax)))
+    print('  таксономия: групп %d, подгрупп %d, артикулов %d (вне прайса по категории: %d)'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax),_nopr))
     ov=KRS['overview']
     print(f"  overview {CUR_YEAR}: продажи {ov['sales']:,} ₽ | план YTD {ov['planYTD']:,} | "
           f"выполн {ov['planDone']}% | АППГ {ov['growth']}% (к тем же мес. {CUR_YEAR-1})")
