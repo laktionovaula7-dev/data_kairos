@@ -1244,8 +1244,13 @@ if __name__=='__main__':
         if _g=='Прочее':                       # нет категории — пробуем по названию (шуруп/дюбель→Крепёж и т.п.)
             _g2=group_of(_sk[1] or '',_br)
             if _g2!='Прочее': _g=_g2
-        _s=_raw or '—'
-        _tax[_art]=[_g,_s]; _tree.setdefault(_g,{})[_s]=1
+        if _br in ('KRONbuild','ENKI'):
+            _s=_g                                           # цельные линейки (пены/герметики/клеи/ЛКМ/крепёж/уплотнители) — без подгрупп
+        else:
+            _s=re.sub(r'\s*\([^)]*\)','',_raw).strip() or _raw or '—'   # HeadRock: схлопываем размеры/варианты в скобках
+        _tax[_art]=[_g,_s]
+        _tree.setdefault(_g,{})                              # группа всегда в дереве
+        if _s and _s!=_g: _tree[_g][_s]=1                    # подгруппы — только реальные
     KRS['tax']=_tax
     KRS['groupTree']={_g:sorted(_tree[_g].keys()) for _g in _tree}
     print('  таксономия: групп %d, подгрупп %d, артикулов %d (вне прайса по категории: %d)'%(len(_tree),sum(len(v) for v in _tree.values()),len(_tax),_nopr))
