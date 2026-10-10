@@ -520,7 +520,7 @@ def load_tracking(price):
     wb=openpyxl.load_workbook(F_TRACK,read_only=True,data_only=True)
     ws=wb[wb.sheetnames[0]]; allrows=list(ws.iter_rows(min_row=1,values_only=True)); wb.close()
     # --- колонки по заголовку (устойчиво к смене раскладки; артикул может отсутствовать) ---
-    C={'name':8,'art':None,'qty':11,'port':3,'ktk':4,'eta':5}
+    C={'name':8,'art':None,'qty':11,'sea':0,'port':3,'ktk':4,'eta':5}
     # строка-заголовок = та, где ячейка РОВНО «Номенклатура» (не путать с параметрами «…из списка номенклатуры»)
     hrow=next((rr for rr in allrows[:16] if any(isinstance(c,str) and c.strip().lower()=='номенклатура' for c in rr)),None)
     if hrow:
@@ -529,6 +529,7 @@ def load_tracking(price):
             t=c.strip().lower()
             if t=='номенклатура': C['name']=i
             elif t.startswith('артикул'): C['art']=i
+            elif 'выход' in t and 'мор' in t: C['sea']=i
             elif 'порт' in t: C['port']=i
             elif 'ктк' in t: C['ktk']=i
             elif t.startswith('дата поступления') and 'ктк' not in t: C['eta']=i
@@ -556,14 +557,17 @@ def load_tracking(price):
         if qty<=0: continue
         nm=str(name).strip()
         m=re.search(r'от (\d{2}\.\d{2}\.20\d{2})',doc); od=m.group(1) if m else ''
-        port=_d(g(C['port'])); ktk=_d(g(C['ktk'])); eta=_d(g(C['eta']))
+        sea=_d(g(C['sea'])); port=_d(g(C['port'])); ktk=_d(g(C['ktk'])); eta_raw=_d(g(C['eta']))
+        # ПРАВИЛО: «Дата поступления» достоверна, только если есть хотя бы одна дата логистики (выход в море / приход в порт / КТК на станцию).
+        # Если заполнена только 4-я дата — срок поставки пока неизвестен («даты уточняются»), датой поступления не пользуемся.
+        eta=eta_raw if (sea or port or ktk) else None
         _artf=g(C['art']) if C['art'] is not None else None  # артикул из файла слежения (если колонка есть)
         cat,art=cat_art(nm,price); br=brand_of(nm,price)
         art=(str(_artf).strip() if _artf not in (None,'') else '') or art   # приоритет артикула из слежения
-        key=(art or nm, _dest(wh), status, eta or '', port or '', ktk or '', od)
+        key=(art or nm, _dest(wh), status, eta or '', sea or '', port or '', ktk or '', od, '' if eta else (eta_raw or ''))
         if key in agg: agg[key]['qty']+=qty
         else: agg[key]={'name':nm,'art':art or '','brand':br,'cat':group_cat(cat,br,nm),
-            'qty':qty,'status':status,'dest':_dest(wh),'wh':wh,'order':od,'port':port,'ktk':ktk,'eta':eta}
+            'qty':qty,'status':status,'dest':_dest(wh),'wh':wh,'order':od,'sea':sea,'port':port,'ktk':ktk,'eta':eta,'etaPlan':eta_raw,'datesTBD':(eta is None)}
     out=[dict(v,qty=round(v['qty'])) for v in agg.values()]
     out.sort(key=lambda x:(x['eta'] or '9999',x['status']))
     nprod=sum(1 for o in out if o['status']=='В производстве'); ntr=sum(1 for o in out if o['status']=='В пути')

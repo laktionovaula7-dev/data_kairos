@@ -1318,10 +1318,17 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
   function whIncomingByArt(){
     if(window.__whInc)return window.__whInc;
     var m={},IN=D.incoming||[],today=D.dataAsOf||'';
-    IN.forEach(function(x){if(!x.art)return;var e=m[x.art]||(m[x.art]={qty:0,eta:null});e.qty+=x.qty||0;
-      if(x.eta&&(!e.eta||x.eta<e.eta))e.eta=x.eta;});
+    var _nk=function(t){return String(t||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ').trim();},_byNm={};(D.txSkus||[]).forEach(function(sk){if(sk[0])_byNm[_nk(sk[1])]=sk[0];});
+    IN.forEach(function(x){if(!x.art){var a2=_byNm[_nk(x.name)];if(a2)x.art=a2;}});
+    IN.forEach(function(x){if(!x.art)return;var e=m[x.art]||(m[x.art]={qty:0,eta:null,tbd:0,prod:0,tr:0});e.qty+=x.qty||0;
+      if(x.status==='В производстве')e.prod+=x.qty||0;else if(x.status==='В пути')e.tr+=x.qty||0;
+      if(x.eta){if(!e.eta||x.eta<e.eta)e.eta=x.eta;}else e.tbd+=x.qty||0;});
     window.__whInc=m;return m;
   }
+  /* «Ожидается»: количество + ближайшая достоверная дата (есть логистические даты) либо «даты уточняются» (заполнена только 4-я дата) */
+  window.whIncCell=function(e){if(!e||!(e.qty>0))return '<span class="mu">—</span>';
+    var d=e.eta?('к '+whDate(e.eta)):'<span class="mu">даты уточняются</span>';
+    return '<b>'+whNum(e.qty)+' шт</b><small>'+d+(e.eta&&e.tbd>0?(' · +'+whNum(e.tbd)+' шт без даты'):'')+'</small>';};
   function whHead(){return '<div class="page-head"><div><h1>Склады и логистика</h1><div class="page-sub">Остатки по складам, поставки из Китая (в пути) и дефицит с оценкой потерь. Данные на '+esc(D.dataAsOfHuman||'')+'.</div></div></div>';}
   function whSubnav(tab){var T=[['stock','Остатки по складам'],['incoming','Ожидается из Китая'],['deficit','Дефицит и потери']];
     return '<div class="wh-sub">'+T.map(function(x){return '<button class="'+(tab===x[0]?'on':'')+'" onclick="whGoTab(\''+x[0]+'\')">'+x[1]+'</button>';}).join('')+'</div>';}
@@ -1352,7 +1359,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     if(state.whBr)IN=IN.filter(function(x){return (x.brand||'')===state.whBr;});
     var qsum=function(a){return a.reduce(function(s,x){return s+(x.qty||0);},0);};
     var inTransit=IN.filter(function(x){return x.status==='В пути';}),inProd=IN.filter(function(x){return x.status==='В производстве';});
-    var today=D.dataAsOf||'';var etas=IN.filter(function(x){return x.eta;}).map(function(x){return x.eta;}).sort();
+    var today=D.dataAsOf||'';var etas=IN.filter(function(x){return x.eta;}).map(function(x){return x.eta;}).sort();var tbdN=IN.filter(function(x){return !x.eta;}).length;
     var futEtas=etas.filter(function(e){return e>=today;});var nextEta=futEtas.length?futEtas[0]:(etas.length?etas[etas.length-1]:null);
     var overdue=IN.filter(function(x){return x.eta&&x.eta<today;});var DESTS=['Москва','Владивосток','Новосибирск','СЕТИ','Прочее'];
     var rows=IN.filter(function(x){if(st.status&&x.status!==st.status)return false;if(st.dest&&x.dest!==st.dest)return false;
@@ -1360,9 +1367,9 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     rows.sort(function(a,b){return (a.eta||'9999').localeCompare(b.eta||'9999')||(b.qty-a.qty);});
     var lim=state.whLimit||40,shown=rows.slice(0,lim);
     function sc(l,v,s,grad){return '<div class="wh-kpi'+(grad?' g':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
-    var kpis='<div class="wh-kpis"'+(overdue.length?' style="grid-template-columns:repeat(5,1fr)"':'')+'>'
+    var kpis='<div class="wh-kpis" style="grid-template-columns:repeat('+(overdue.length?6:5)+',1fr)">'
       +sc('В пути',inTransit.length+' поз.',whNum(qsum(inTransit))+' шт',1)+sc('В производстве',inProd.length+' поз.',whNum(qsum(inProd))+' шт')
-      +sc('Ближайшее поступление',whDate(nextEta),'ожидаемая дата')
+      +sc('Ближайшее поступление',nextEta?whDate(nextEta):'—',nextEta?'по датам логистики':'даты уточняются')+sc('Даты уточняются',tbdN+' поз.','срок поставки пока неизвестен')
       +(overdue.length?'<div class="wh-kpi od"><div class="l">Просрочено</div><div class="v">'+overdue.length+' поз.</div><div class="s">плановая дата прошла</div></div>':'')
       +sc('Всего ожидается',IN.length+' поз.',whNum(qsum(IN))+' шт')+'</div>';
     function chip(k,v,l){return '<button class="wh-chip'+((st[k]||'')===v?' on':'')+'" onclick="setWhF(\''+k+'\',\''+v+'\')">'+l+'</button>';}
@@ -1370,10 +1377,10 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     var fil='<div class="card pad wh-fl">'+whBrandChips()+'<div class="wh-fg"><span>Статус</span>'+chip('status','В пути','В пути')+chip('status','В производстве','В производстве')+'</div>'
       +'<div class="wh-fg"><span>Склад</span>'+destChips+'</div><input id="whSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whSearch(this.value)"></div>';
     var tb=shown.map(function(x){var stc=x.status==='В пути'?'<span class="wh-st tr">● В пути</span>':'<span class="wh-st pr">● В производстве</span>';
-      return '<tr><td><b>'+esc(x.name)+'</b><small>'+(x.art?('Арт. '+esc(x.art)+' · '):'')+esc(x.cat||'')+'</small></td><td>'+esc(x.brand||'')+'</td><td class="r">'+whNum(x.qty)+'</td><td>'+stc+'</td><td>'+esc(x.dest||'')+'</td><td class="c">'+(x.order?esc(x.order):'<span class="mu">—</span>')+'</td><td class="c">'+whDate(x.port)+'</td><td class="c">'+whDate(x.ktk)+'</td><td class="c"><b>'+whDate(x.eta)+'</b></td></tr>';}).join('');
+      return '<tr><td><b>'+esc(x.name)+'</b><small>'+(x.art?('Арт. '+esc(x.art)+' · '):'')+esc(x.cat||'')+'</small></td><td>'+esc(x.brand||'')+'</td><td class="r">'+whNum(x.qty)+'</td><td>'+stc+'</td><td>'+esc(x.dest||'')+'</td><td class="c">'+(x.order?esc(x.order):'<span class="mu">—</span>')+'</td><td class="c">'+(x.eta?(whDate(x.sea)+'</td><td class="c">'+whDate(x.port)+'</td><td class="c">'+whDate(x.ktk)+'</td><td class="c"><b>'+whDate(x.eta)+'</b></td></tr>'):('<td class="c" colspan="4"><span class="mu">даты уточняются</span></td></tr>'));}).join('');
     var tbl='<section class="card pad"><div class="card-title">Ожидается из Китая '+dataTag('source')+'<span class="right">'+rows.length+' позиций'+(st.status||st.dest||st.q?' · отфильтровано':'')+'</span></div>'
-      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«В производстве» — ещё изготавливается; «В пути» — отгружено, с датами прихода в порт → на станцию → поступления. Даты плановые.</div>'
-      +'<div class="table-wrap" style="max-height:620px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th><th class="r">Кол-во, шт</th><th>Статус</th><th>Склад</th><th class="c">Заказ от</th><th class="c">Приход в порт</th><th class="c">На станцию</th><th class="c">Поступление</th></tr></thead><tbody>'
+      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«В производстве» — ещё изготавливается; «В пути» — отгружено, с датами выхода в море → прихода в порт → КТК на станцию → поступления. Даты плановые. Если указана только дата поступления, срок считается неизвестным — «даты уточняются».</div>'
+      +'<div class="table-wrap" style="max-height:620px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th><th class="r">Кол-во, шт</th><th>Статус</th><th>Склад</th><th class="c">Заказ от</th><th class="c">Выход в море</th><th class="c">Приход в порт</th><th class="c">КТК на станцию</th><th class="c">Поступление</th></tr></thead><tbody>'
       +(tb||'<tr><td colspan="9" class="empty">ничего не найдено под фильтр</td></tr>')+'</tbody></table></div>'
       +(rows.length>lim?'<button class="wh-more" onclick="whMore()">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
     return kpis+fil+tbl;
@@ -1418,10 +1425,10 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
       var qcells=st.wh?('<td class="r"><b>'+whNum(r.qty)+'</b></td>'):(WHS.map(function(w){var v=(r.wh[w]||0);return '<td class="r">'+(v?whNum(v):'<span class="mu">·</span>')+'</td>';}).join('')+'<td class="r"><b>'+whNum(r.tot)+'</b></td>');
       var sb='<span class="wh-sb '+(r.status||'ok')+'">'+(SL[r.status]||'—')+'</span>';
       return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+'</small></td><td>'+esc(r.brand)+'</td>'+qcells
-        +'<td class="r">'+whNum(r.sold)+'</td><td class="r">'+(r.dos==null?'<span class="mu">—</span>':whNum(r.dos)+' дн')+'</td><td>'+sb+(r.edet?' <span class="wh-sb go">едет</span>':'')+'</td></tr>';}).join('');
+        +'<td class="r">'+whNum(r.sold)+'</td><td class="r">'+(r.dos==null?'<span class="mu">—</span>':whNum(r.dos)+' дн')+'</td><td class="r wh-inc">'+whIncCell(inc[r.art])+'</td><td>'+sb+(r.edet?' <span class="wh-sb go">едет</span>':'')+'</td></tr>';}).join('');
     var tbl='<section class="card pad"><div class="card-title">Остатки по складам '+dataTag('source')+'<span class="right">'+rows.length+' позиций'+(st.wh?(' · '+esc(st.wh)):'')+'</span></div>'
-      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«Продано» — за 90 дней; «Запас» — на сколько дней хватит при текущем темпе; «мало» — меньше 30 дней. «Едет» — есть поставка в пути.</div>'
-      +'<div class="table-wrap" style="max-height:640px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th>'+cols+'<th class="r">Продано 90д</th><th class="r">Запас</th><th>Статус</th></tr></thead><tbody>'
+      +'<div style="font-size:12px;color:#727987;margin-bottom:10px">«Продано» — за 90 дней; «Запас» — на сколько дней хватит при текущем темпе; «мало» — меньше 30 дней. «Едет» — есть поставка в пути; «Ожидается» — количество и ближайшая дата поступления (если даты логистики не заданы — «даты уточняются»).</div>'
+      +'<div class="table-wrap" style="max-height:640px"><table class="data-table wh-tbl"><thead><tr><th>Товар</th><th>Бренд</th>'+cols+'<th class="r">Продано 90д</th><th class="r">Запас</th><th class="r">Ожидается</th><th>Статус</th></tr></thead><tbody>'
       +(tb||'<tr><td colspan="12" class="empty">ничего не найдено под фильтр</td></tr>')+'</tbody></table></div>'
       +(rows.length>lim?'<button class="wh-more" onclick="whSMore()">Показать ещё · осталось '+(rows.length-lim)+'</button>':'')+'</section>';
     return kpis+fil+tbl;
@@ -1461,7 +1468,7 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     var fil='<div class="card pad wh-fl">'+whBrandChips()+'<div class="wh-fg"><span>Фильтр</span>'+dchip('oos','Только «нет в наличии»')+dchip('no','Не едут')+dchip('yes','Едут')+'</div>'
       +'<input id="whDSearch" class="wh-srch" placeholder="Поиск по товару или артикулу…" value="'+esc(st.q||'')+'" oninput="whDSearch(this.value)"></div>';
     var tb=shown.map(function(r){
-      var flag=r.oos?(r.edet?'<span class="wh-sb go">нет · едет к '+whDate(r.eta)+'</span>':'<span class="wh-sb crit">нет · не едет</span>'):'<span class="wh-sb short">мало</span>';
+      var flag=r.oos?(r.edet?'<span class="wh-sb go">'+(r.eta?('нет · едет к '+whDate(r.eta)):'нет · едет, даты уточняются')+'</span>':'<span class="wh-sb crit">нет · не едет</span>'):'<span class="wh-sb short">мало</span>';
       return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+esc(r.brand||'')+'</td>'
         +'<td class="r">'+(r.stock>0?whNum(r.stock):'<b style="color:#C7001F">0</b>')+'</td>'
         +'<td class="r">'+whNum(r.curQ)+'</td><td class="r">'+whNum(r.prevQ)+'</td>'
@@ -3658,7 +3665,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +'.sales-ovn .sv-brdw{margin-bottom:18px}.sales-ovn .sv-brd-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;background:none!important;padding:0!important;box-shadow:none!important;border:0!important}.sales-ovn .sv-geo{align-items:start}.sales-ovn .sv-bandin .s-metr .s-mc{border:0!important;border-top:1px solid var(--line)!important}.sales-ovn .sv-bandin .s-metr .s-mc:nth-child(-n+3){border-top:0!important}.sales-ovn .sv-brd-row .sv-bgrp{background:#232326;border-radius:16px;padding:14px 16px;color:#fff}@media(max-width:1000px){.sales-ovn .sv-brd-row{grid-template-columns:1fr}}'
       +'.sales-ovn .sv-fmo{height:210px}.sales-ovn .sv-fmo .bars{padding-top:24px}.sales-ovn .sv-fmo .bf,.sales-ovn .sv-fmo .bp{width:11px}'
       +'.sales-ovn .sv-brd-row .sv-bgrp+.sv-bgrp{margin-top:0!important;border-top:0!important;padding-top:14px!important}.sales-ovn .sv-prod>.card{margin-bottom:0}.sales-ovn .sv-geo-tbl .sv-fop{margin-top:16px}'
-      +'.sales-ovn .sv-prod>.card{display:flex;flex-direction:column}.sales-ovn .sv-asum{margin-top:16px;padding-top:14px;border-top:1px solid var(--ln)}.sales-ovn .sv-asum .sv-t3{font-size:13px}'
+      +'.sales-ovn .sv-prod>.card{display:flex;flex-direction:column}.sales-ovn .sv-asum{margin-top:16px;padding-top:14px;border-top:1px solid var(--ln)}.sales-ovn .sv-prod .sv-grp{flex:1;display:flex;flex-direction:column}.sales-ovn .sv-prod .sv-grp>.grp{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center}.sales-ovn .sv-prod .sv-grp>details.grp[open]{flex:0 0 auto}.sales-ovn .sv-asum .sv-t3{font-size:13px}'
+      +'.wh-inc small,.sv-abct .wh-inc small{display:block;font-size:11px;color:#86888D;font-weight:500}.wh-inc small{white-space:normal;max-width:230px;margin-left:auto}'
       +'@media(max-width:1000px){.sales-ovn .s-band-metrics{grid-template-columns:repeat(2,1fr)}.sales-ovn .s-bm{border-top:1px solid var(--ln)}.sales-ovn .s-dyn2{grid-template-columns:1fr}.sales-ovn .s-band-top{grid-template-columns:1fr}.sales-ovn .s-bt-div{display:none}.sales-ovn .s-kpis{grid-template-columns:repeat(2,1fr)}.sales-ovn .sf-grid{grid-template-columns:repeat(2,1fr)}}'
       +'</style>';
     // ================= НОВАЯ СТРУКТУРА «ПРОДАЖИ» (по ТЗ: один вид анализа на экране) =================
@@ -3954,8 +3962,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var cellLabel=cell?('<div class="sv-cellbar"><span>Выбрано: <b>'+cell.cc+' компании → '+(cell.lc==='NB'?'Не берёт':('класс '+cell.lc+' среза'))+'</b> · '+cellBase+' '+(cellBase%10===1&&cellBase%100!==11?'товар':'товаров')+'</span><button onclick="abcCellPick(null)">Сбросить выбор ✕</button></div>'):'';
     var whPop=state.abcWhOpen?('<div class="sv-pop"><label class="sv-ck"><input type="checkbox" '+(whAll?'checked':'')+' onchange="abcWhAll(this.checked)"> Все склады</label>'+WHO.map(function(w){return '<label class="sv-ck"><input type="checkbox" '+(whSel.indexOf(w)>=0?'checked':'')+' onchange="abcWhToggle(\''+qs(w)+'\')"> '+esc(w)+'</label>';}).join('')+'</div>'):'';
     var expPop=state.abcExpOpen?('<div class="sv-pop sv-exp"><div class="sv-popt">Выгрузка в Excel</div><label class="sv-ck"><input type="radio" name="expm" '+((state.abcExpMode||'cur')==='cur'?'checked':'')+' onchange="abcExpMode(\'cur\')"> Текущая выборка <small>срез, период и локальные фильтры таблицы</small></label><label class="sv-ck"><input type="radio" name="expm" '+(state.abcExpMode==='full'?'checked':'')+' onchange="abcExpMode(\'full\')"> Полный ABC компании за период <small>без ограничений среза и таблицы</small></label><div class="sv-popt" style="margin-top:10px">Склады (наличие в файле)</div><label class="sv-ck"><input type="checkbox" '+(whAll?'checked':'')+' onchange="abcWhAll(this.checked)"> Все склады</label>'+WHO.map(function(w){return '<label class="sv-ck"><input type="checkbox" '+(whSel.indexOf(w)>=0?'checked':'')+' onchange="abcWhToggle(\''+qs(w)+'\')"> '+esc(w)+'</label>';}).join('')+'<div class="sv-popb"><button class="sv-btn dark" onclick="abcExport()">Скачать</button><button class="sv-btn" onclick="abcExpToggle()">Закрыть</button></div></div>'):'';
-    var abcTable='<table class="sv-tbl sv-abct"><thead><tr>'+aHead('n','Товар','')+'<th>ABC компании</th><th title="Класс товара внутри выбранного среза">'+_lvlHdr+'</th><th>Покупки</th>'+aHead('s','Продажи среза, ₽','r')+aHead('share','Доля в компании, %','r','Продажи товара по всей компании / выручка компании за тот же период. Территория и клиент знаменатель не меняют.')+aHead('av','Наличие, шт.','r',whAll?'Все склады':('Склады: '+whSel.join(', ')))+'</tr></thead><tbody>'
-      +(aPage.length?aPage.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+clsBadge(r.cc)+'</td><td>'+clsBadge(r.lc)+'</td><td>'+stChip(r.st)+'</td><td class="r">'+(r.s>0?Math.round(r.s).toLocaleString('ru-RU'):'0')+'</td><td class="r">'+(Math.round(r.share*1000)/10).toLocaleString('ru-RU')+'%</td><td class="r">'+(r.av==null?'<span class="mu" title="наличие неизвестно">н/д</span>':Math.round(r.av).toLocaleString('ru-RU'))+'</td></tr>';}).join(''):'<tr><td colspan="7" class="sv-empty">нет товаров под выбранный отбор'+(cell&&cellBase===0?' (в этой ячейке 0 товаров)':'')+'</td></tr>')+'</tbody></table>';
+    var abcTable='<table class="sv-tbl sv-abct"><thead><tr>'+aHead('n','Товар','')+'<th>ABC компании</th><th title="Класс товара внутри выбранного среза">'+_lvlHdr+'</th><th>Покупки</th>'+aHead('s','Продажи среза, ₽','r')+aHead('share','Доля в компании, %','r','Продажи товара по всей компании / выручка компании за тот же период. Территория и клиент знаменатель не меняют.')+aHead('av','Наличие, шт.','r',whAll?'Все склады':('Склады: '+whSel.join(', ')))+'<th class="r" title="Заказы поставщику (в пути и в производстве): количество и ближайшая дата поступления">Ожидается</th></tr></thead><tbody>'
+      +(aPage.length?aPage.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+clsBadge(r.cc)+'</td><td>'+clsBadge(r.lc)+'</td><td>'+stChip(r.st)+'</td><td class="r">'+(r.s>0?Math.round(r.s).toLocaleString('ru-RU'):'0')+'</td><td class="r">'+(Math.round(r.share*1000)/10).toLocaleString('ru-RU')+'%</td><td class="r">'+(r.av==null?'<span class="mu" title="наличие неизвестно">н/д</span>':Math.round(r.av).toLocaleString('ru-RU'))+'</td><td class="r wh-inc">'+whIncCell(whIncomingByArt()[r.art])+'</td></tr>';}).join(''):'<tr><td colspan="8" class="sv-empty">нет товаров под выбранный отбор'+(cell&&cellBase===0?' (в этой ячейке 0 товаров)':'')+'</td></tr>')+'</tbody></table>';
     var _grByG={};abcRows.forEach(function(r){var g=grpOf(r.sk),sub=subOf(r.sk);var G=_grByG[g]||(_grByG[g]={s:0,sku:0,buy:0,subs:{}});G.s+=r.s;G.sku++;if(r.s>0)G.buy++;var S=G.subs[sub]||(G.subs[sub]={s:0,sku:0,buy:0});S.s+=r.s;S.sku++;if(r.s>0)S.buy++;});
     var _grArr=Object.keys(_grByG).map(function(g){return [g,_grByG[g]];}).sort(function(a,b){return b[1].s-a[1].s;});
     var _grTot=_grArr.reduce(function(s,x){return s+x[1].s;},0)||1,_gmax=_grArr.length?_grArr[0][1].s:1;
@@ -4136,10 +4144,10 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     if(!X.whSel||!X.whSel.length){svToast('Выберите хотя бы один склад для выгрузки.');return;}
     var T=X.T||{},W=X.whSel,sheets=[];
     function stockRow(art){return W.map(function(w){var v=(T[art]&&T[art].wh)?T[art].wh[w]:null;return v==null?'':Math.round(v);});}
-    var incByArt={};(D.incoming||[]).forEach(function(o){var a=o.art||o.name;var x=incByArt[a]||(incByArt[a]={p:0,t:0});if(o.status==='В производстве')x.p+=o.qty;else if(o.status==='В пути')x.t+=o.qty;});
+    var incByArt={};(D.incoming||[]).forEach(function(o){var a=o.art||o.name;var x=incByArt[a]||(incByArt[a]={p:0,t:0,eta:null,tbd:0});if(o.status==='В производстве')x.p+=o.qty;else if(o.status==='В пути')x.t+=o.qty;if(o.eta){if(!x.eta||o.eta<x.eta)x.eta=o.eta;}else x.tbd+=o.qty;});
     function qnum(v){return (v==null||v==='')?'':{v:Math.round(v),s:'n'};}
-    var QHDR=['Продано, шт','В наличии, шт','Отгружается, шт','В резерве, шт','Доступно, шт','В производстве, шт','В пути, шт'];
-    function qtyCells(art,soldQty){var tv=T[art]||{},ic=incByArt[art]||{p:0,t:0};return [qnum(soldQty),qnum(tv.in_stock),qnum(tv.shipping),qnum(tv.reserved),qnum(tv.available),qnum(ic.p),qnum(ic.t)];}
+    var QHDR=['Продано, шт','В наличии, шт','Отгружается, шт','В резерве, шт','Доступно, шт','В производстве, шт','В пути, шт','Ближайшее поступление'];
+    function qtyCells(art,soldQty){var tv=T[art]||{},ic=incByArt[art]||{p:0,t:0};return [qnum(soldQty),qnum(tv.in_stock),qnum(tv.shipping),qnum(tv.reserved),qnum(tv.available),qnum(ic.p),qnum(ic.t),(ic.p||ic.t)?(ic.eta?(ic.eta.slice(8,10)+'.'+ic.eta.slice(5,7)+'.'+ic.eta.slice(0,4)+(ic.tbd?' (+часть — даты уточняются)':'')):'даты уточняются'):''];}
     var abcRule='A — накопленная доля выручки позиции (с её учётом) ≤80%; B — ≤95%; C — остальное. Позиция, пересекающая границу, относится к более низкому классу. Возвраты вычитаются (нетто).';
     if(!full){
       var rowsX=X.filtered,F=X.AF||{},cell=X.cell;
