@@ -363,18 +363,20 @@ KI.loadStock = async function (blob, refs, progress) {
     if (c0 && !isart) { if (lv === 0) cur = String(c0).trim(); return; }
     if (!isart) return;
     var a = String(c0).trim(), d = agg.get(a);
-    if (!d) { d = { name: '', in_stock: 0, shipping: 0, reserved: 0, available: 0, incoming: 0, company: 0, wh: {} }; agg.set(a, d); }
+    if (!d) { d = { name: '', in_stock: 0, shipping: 0, reserved: 0, available: 0, incoming: 0, company: 0, wh: {}, whAv: {}, whShip: {}, whRes: {} }; agg.set(a, d); }
     if (!d.name) d.name = String(c2).trim();
     var q7 = num(v[7]); d.company += q7;
     if (q7) { var wb = whBucket(cur); d.wh[wb] = (d.wh[wb] || 0) + q7; }
+    var wb2 = whBucket(cur); d.whAv[wb2] = (d.whAv[wb2] || 0) + num(v[10]); d.whShip[wb2] = (d.whShip[wb2] || 0) + num(v[8]); d.whRes[wb2] = (d.whRes[wb2] || 0) + num(v[9]);
     if (cur === WH) { d.in_stock += q7; d.shipping += num(v[8]); d.reserved += num(v[9]); d.available += num(v[10]); d.incoming += num(v[11]); }
   });
   if (!seenHdr) throw new Error('Не похоже на отчёт «Остатки и доступность по сериям» (нет шапки «Артикул / Номенклатура»)');
   var stock = {};
+  function sparse(o) { var r = {}; Object.keys(o).forEach(function (k) { if (Math.abs(o[k]) >= 0.5) r[k] = round1(o[k]); }); return r; }
   agg.forEach(function (d, a) {
     var wh = {}; Object.keys(d.wh).forEach(function (k) { var x = round1(d.wh[k]); if (Math.abs(d.wh[k]) >= 0.5) wh[k] = x; });
     stock[a] = { name: d.name, in_stock: round1(d.in_stock), shipping: round1(d.shipping), reserved: round1(d.reserved), available: round1(d.available),
-      incoming: round1(d.incoming), company_in_stock: round1(d.company), wh: wh };
+      incoming: round1(d.incoming), company_in_stock: round1(d.company), wh: wh, whAv: sparse(d.whAv), whShip: sparse(d.whShip), whRes: sparse(d.whRes) };
   });
   return stock;
 };
@@ -497,7 +499,7 @@ KI.buildKRS = function (S, stock, expiryRaw, ctx) {
     var s = stock[art], inst = s.in_stock || 0; if (inst <= 0) return;
     var sold = recentQty.get(art) || 0, perday = sold / TURN, dos = perday > 0 ? inst / perday : null, p1 = artPrice[art] || 0;
     var ex = expiry[art] || {}, expQ = ex.expired || 0, soonQ = ex.soon || 0;
-    turn[art] = { dos: dos !== null ? pyRound(dos) : null, in_stock: inst, available: s.available, reserved: s.reserved || 0, incoming: s.incoming || 0, wh: s.wh || {},
+    turn[art] = { dos: dos !== null ? pyRound(dos) : null, in_stock: inst, available: s.available, reserved: s.reserved || 0, incoming: s.incoming || 0, wh: s.wh || {}, whAv: s.whAv || {}, whShip: s.whShip || {}, whRes: s.whRes || {},
       company_in_stock: s.company_in_stock || 0, sold: pyRound(sold), frozen: pyRound(inst * p1), name: s.name,
       exp_near: ex.nearest === undefined ? null : ex.nearest, exp_days: ex.nearest_days === undefined ? null : ex.nearest_days, exp_expired: expQ, exp_soon: soonQ,
       exp_froz: pyRound(expQ * p1), soon_froz: pyRound(soonQ * p1), batches: ex.list || [],

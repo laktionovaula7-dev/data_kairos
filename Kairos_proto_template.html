@@ -1322,10 +1322,19 @@ var s = document.createElement('style'); s.id = 'kpp-css'; s.textContent = css; 
     IN.forEach(function(x){if(!x.art){var a2=_byNm[_nk(x.name)];if(a2)x.art=a2;}});
     IN.forEach(function(x){if(!x.art)return;var e=m[x.art]||(m[x.art]={qty:0,eta:null,tbd:0,prod:0,tr:0});e.qty+=x.qty||0;
       if(x.status==='В производстве')e.prod+=x.qty||0;else if(x.status==='В пути')e.tr+=x.qty||0;
-      if(x.eta){if(!e.eta||x.eta<e.eta)e.eta=x.eta;}else e.tbd+=x.qty||0;});
+      if(x.eta){if(!e.eta||x.eta<e.eta)e.eta=x.eta;}else e.tbd+=x.qty||0;
+      (e.rows||(e.rows=[])).push({dest:x.dest||'Прочее',status:x.status,qty:x.qty||0,eta:x.eta||null,sea:x.sea||null,port:x.port||null,ktk:x.ktk||null});});
     window.__whInc=m;return m;
   }
   /* «Ожидается»: количество + ближайшая достоверная дата (есть логистические даты) либо «даты уточняются» (заполнена только 4-я дата) */
+  /* склад назначения заказа -> группа складов ABC */
+  var WH_DEST={'Москва':'Москва','Владивосток':'Владивосток','Новосибирск':'Новосибирск','СЕТИ':'Лакония СЕТИ','Прочее':'Прочее'};
+  window.whIncSel=function(e,sel){if(!e||!e.rows)return e;if(!sel)return e;var o={qty:0,eta:null,tbd:0,rows:[]};
+    e.rows.forEach(function(r){if(sel.indexOf(WH_DEST[r.dest]||'Прочее')<0)return;o.rows.push(r);o.qty+=r.qty;if(r.eta){if(!o.eta||r.eta<o.eta)o.eta=r.eta;}else o.tbd+=r.qty;});return o;};
+  window.whIncDetail=function(e){if(!e||!e.rows||!e.rows.length)return '';var g={};
+    e.rows.forEach(function(r){var k=r.dest+'|'+r.status+'|'+(r.eta||'');var a=g[k]||(g[k]={dest:r.dest,status:r.status,qty:0,eta:r.eta});a.qty+=r.qty;});
+    return Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){return (a.eta||'9999').localeCompare(b.eta||'9999');}).map(function(a){
+      return '<span class="wh-il">'+esc(a.dest)+' · '+(a.status==='В пути'?'в пути':'в произв.')+' '+whNum(a.qty)+' шт · '+(a.eta?('к '+whDate(a.eta)):'даты уточняются')+'</span>';}).join('');};
   window.whIncCell=function(e){if(!e||!(e.qty>0))return '<span class="mu">—</span>';
     var d=e.eta?('к '+whDate(e.eta)):'<span class="mu">даты уточняются</span>';
     return '<b>'+whNum(e.qty)+' шт</b><small>'+d+(e.eta&&e.tbd>0?(' · +'+whNum(e.tbd)+' шт без даты'):'')+'</small>';};
@@ -3666,7 +3675,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +'.sales-ovn .sv-fmo{height:210px}.sales-ovn .sv-fmo .bars{padding-top:24px}.sales-ovn .sv-fmo .bf,.sales-ovn .sv-fmo .bp{width:11px}'
       +'.sales-ovn .sv-brd-row .sv-bgrp+.sv-bgrp{margin-top:0!important;border-top:0!important;padding-top:14px!important}.sales-ovn .sv-prod>.card{margin-bottom:0}.sales-ovn .sv-geo-tbl .sv-fop{margin-top:16px}'
       +'.sales-ovn .sv-prod>.card{display:flex;flex-direction:column}.sales-ovn .sv-asum{margin-top:16px;padding-top:14px;border-top:1px solid var(--ln)}.sales-ovn .sv-prod .sv-grp{flex:1;display:flex;flex-direction:column}.sales-ovn .sv-prod .sv-grp>.grp{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center}.sales-ovn .sv-prod .sv-grp>details.grp[open]{flex:0 0 auto}.sales-ovn .sv-asum .sv-t3{font-size:13px}'
-      +'.wh-inc small,.sv-abct .wh-inc small{display:block;font-size:11px;color:#86888D;font-weight:500}.wh-inc small{white-space:normal;max-width:230px;margin-left:auto}'
+      +'.wh-inc small,.sv-abct .wh-inc small{display:block;font-size:11px;color:#86888D;font-weight:500}.wh-inc small{white-space:normal;max-width:230px;margin-left:auto}.wh-inc .wh-il{display:block;font-size:10.5px;color:#6c6e71;font-weight:500;white-space:nowrap}'
       +'@media(max-width:1000px){.sales-ovn .s-band-metrics{grid-template-columns:repeat(2,1fr)}.sales-ovn .s-bm{border-top:1px solid var(--ln)}.sales-ovn .s-dyn2{grid-template-columns:1fr}.sales-ovn .s-band-top{grid-template-columns:1fr}.sales-ovn .s-bt-div{display:none}.sales-ovn .s-kpis{grid-template-columns:repeat(2,1fr)}.sales-ovn .sf-grid{grid-template-columns:repeat(2,1fr)}}'
       +'</style>';
     // ================= НОВАЯ СТРУКТУРА «ПРОДАЖИ» (по ТЗ: один вид анализа на экране) =================
@@ -3932,21 +3941,22 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     if(!whSel.length)whSel=WHO.slice();
     var whAll=(whSel.length===WHO.length);
     function stockOf(art,w){var tv=T[art]||{};return (tv.wh&&tv.wh[w]!=null)?tv.wh[w]:null;}
+    function sumSel(art,key){var tv=T[art]||{},m=tv[key];if(!m)return null;var t=0;whSel.forEach(function(w){t+=(m[w]||0);});return t;}
     function stockSel(art){var tv=T[art]||{};if(whAll){var a=tv.company_in_stock;if(a==null)a=tv.in_stock;if(a!=null)return a;}var t=0,any=false;whSel.forEach(function(w){var v=stockOf(art,w);if(v!=null){t+=v;any=true;}});return any?t:null;}
     var STL={buy:'Берёт',prev:'Брал раньше',never:'Не брал'};
     var abcRows=Object.keys(companySku).filter(function(k){return companySku[k]>0;}).map(function(k){var si=D.txSkus[k]||['','—',0,''],s=bySku[k]||0,p=bySkuPrev[k]||0,cc=ccls[k]||'C',lc=s>0?(levCls[k]||'C'):'NB',st=s>0?'buy':(p>0?'prev':'never');
-      return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',cc:cc,lc:lc,st:st,s:s,qty:qtyBySku[k]||0,comp:companySku[k],share:companySku[k]/compTotal,av:stockSel(si[0])};});
+      return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',cc:cc,lc:lc,st:st,s:s,qty:qtyBySku[k]||0,comp:companySku[k],share:companySku[k]/compTotal,onh:stockSel(si[0]),av:(function(){var a=sumSel(si[0],'whAv');return a==null?stockSel(si[0]):a;})(),ship:sumSel(si[0],'whShip'),res:sumSel(si[0],'whRes')};});
     var cell=state.abcCell;
     var abcFiltered=abcRows.filter(function(r){
       if(cell&&!(r.cc===cell.cc&&r.lc===cell.lc))return false;
       if(AF.st==='buy'&&r.st!=='buy')return false;if(AF.st==='nobuy'&&r.st==='buy')return false;if(AF.st==='prev'&&r.st!=='prev')return false;if(AF.st==='never'&&r.st!=='never')return false;
       if(AF.cls&&r.cc!==AF.cls)return false;
-      if(AF.stock&&!(r.av>0))return false;
+      if(AF.stock&&!(r.onh>0))return false;
       var q=(AF.q||'').toLowerCase();if(q&&(r.name+' '+r.art).toLowerCase().indexOf(q)<0)return false;return true;});
     var cellBase=cell?abcRows.filter(function(r){return r.cc===cell.cc&&r.lc===cell.lc;}).length:0;
     var ordC={A:0,B:1,C:2,NB:3};
     abcFiltered.sort(function(a,b){var d=0;if(AF.sk==='s')d=a.s-b.s;else if(AF.sk==='av')d=(a.av||0)-(b.av||0);else if(AF.sk==='share')d=a.share-b.share;else d=a.name.localeCompare(b.name,'ru');return (AF.sd||-1)*d||(a.name.localeCompare(b.name,'ru'));});
-    var APS=10,aPages=Math.max(1,Math.ceil(abcFiltered.length/APS)),aPg=Math.min(AF.page||0,aPages-1),aPage=abcFiltered.slice(aPg*APS,aPg*APS+APS);
+    var APS=AF.all?Math.max(10,abcFiltered.length):10,aPages=Math.max(1,Math.ceil(abcFiltered.length/APS)),aPg=Math.min(AF.page||0,aPages-1),aPage=abcFiltered.slice(aPg*APS,aPg*APS+APS);
     function clsBadge(c){return c==='NB'?'<span class="sv-ab none">—</span>':'<span class="sv-ab '+c+'">'+c+'</span>';}
     function stChip(s){return '<span class="sv-st '+s+'"><i></i>'+STL[s]+'</span>';}
     function aHead(k,l,al,tip){var on=(AF.sk===k);return '<th class="'+(al||'')+'"'+(tip?(' title="'+esc(tip)+'"'):'')+'><button class="sv-th'+(on?' on':'')+'" onclick="setAbc(\'sort\',\''+k+'\')">'+l+(on?((AF.sd||-1)<0?' ↓':' ↑'):'')+'</button></th>';}
@@ -3962,8 +3972,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var cellLabel=cell?('<div class="sv-cellbar"><span>Выбрано: <b>'+cell.cc+' компании → '+(cell.lc==='NB'?'Не берёт':('класс '+cell.lc+' среза'))+'</b> · '+cellBase+' '+(cellBase%10===1&&cellBase%100!==11?'товар':'товаров')+'</span><button onclick="abcCellPick(null)">Сбросить выбор ✕</button></div>'):'';
     var whPop=state.abcWhOpen?('<div class="sv-pop"><label class="sv-ck"><input type="checkbox" '+(whAll?'checked':'')+' onchange="abcWhAll(this.checked)"> Все склады</label>'+WHO.map(function(w){return '<label class="sv-ck"><input type="checkbox" '+(whSel.indexOf(w)>=0?'checked':'')+' onchange="abcWhToggle(\''+qs(w)+'\')"> '+esc(w)+'</label>';}).join('')+'</div>'):'';
     var expPop=state.abcExpOpen?('<div class="sv-pop sv-exp"><div class="sv-popt">Выгрузка в Excel</div><label class="sv-ck"><input type="radio" name="expm" '+((state.abcExpMode||'cur')==='cur'?'checked':'')+' onchange="abcExpMode(\'cur\')"> Текущая выборка <small>срез, период и локальные фильтры таблицы</small></label><label class="sv-ck"><input type="radio" name="expm" '+(state.abcExpMode==='full'?'checked':'')+' onchange="abcExpMode(\'full\')"> Полный ABC компании за период <small>без ограничений среза и таблицы</small></label><div class="sv-popt" style="margin-top:10px">Склады (наличие в файле)</div><label class="sv-ck"><input type="checkbox" '+(whAll?'checked':'')+' onchange="abcWhAll(this.checked)"> Все склады</label>'+WHO.map(function(w){return '<label class="sv-ck"><input type="checkbox" '+(whSel.indexOf(w)>=0?'checked':'')+' onchange="abcWhToggle(\''+qs(w)+'\')"> '+esc(w)+'</label>';}).join('')+'<div class="sv-popb"><button class="sv-btn dark" onclick="abcExport()">Скачать</button><button class="sv-btn" onclick="abcExpToggle()">Закрыть</button></div></div>'):'';
-    var abcTable='<table class="sv-tbl sv-abct"><thead><tr>'+aHead('n','Товар','')+'<th>ABC компании</th><th title="Класс товара внутри выбранного среза">'+_lvlHdr+'</th><th>Покупки</th>'+aHead('s','Продажи среза, ₽','r')+aHead('share','Доля в компании, %','r','Продажи товара по всей компании / выручка компании за тот же период. Территория и клиент знаменатель не меняют.')+aHead('av','Наличие, шт.','r',whAll?'Все склады':('Склады: '+whSel.join(', ')))+'<th class="r" title="Заказы поставщику (в пути и в производстве): количество и ближайшая дата поступления">Ожидается</th></tr></thead><tbody>'
-      +(aPage.length?aPage.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+clsBadge(r.cc)+'</td><td>'+clsBadge(r.lc)+'</td><td>'+stChip(r.st)+'</td><td class="r">'+(r.s>0?Math.round(r.s).toLocaleString('ru-RU'):'0')+'</td><td class="r">'+(Math.round(r.share*1000)/10).toLocaleString('ru-RU')+'%</td><td class="r">'+(r.av==null?'<span class="mu" title="наличие неизвестно">н/д</span>':Math.round(r.av).toLocaleString('ru-RU'))+'</td><td class="r wh-inc">'+whIncCell(whIncomingByArt()[r.art])+'</td></tr>';}).join(''):'<tr><td colspan="8" class="sv-empty">нет товаров под выбранный отбор'+(cell&&cellBase===0?' (в этой ячейке 0 товаров)':'')+'</td></tr>')+'</tbody></table>';
+    var abcTable='<table class="sv-tbl sv-abct"><thead><tr>'+aHead('n','Товар','')+'<th>ABC компании</th><th title="Класс товара внутри выбранного среза">'+_lvlHdr+'</th><th>Покупки</th>'+aHead('s','Продажи среза, ₽','r')+aHead('share','Доля в компании, %','r','Продажи товара по всей компании / выручка компании за тот же период. Территория и клиент знаменатель не меняют.')+aHead('av','Доступно, шт.','r','Доступно к продаже: в наличии минус «отгружается» и «в резерве». '+(whAll?'Все склады':('Склады: '+whSel.join(', '))))+(AF.more?'<th class="r" title="Физически на складах">В наличии</th><th class="r" title="Отгружается по документам, но ещё не ушло со склада">Отгружается</th><th class="r" title="В резерве под заказы клиентов">В резерве</th>':'')+'<th class="r" title="Заказы поставщику (в пути и в производстве) по выбранным складам: количество и ближайшая дата поступления">Ожидается</th></tr></thead><tbody>'
+      +(aPage.length?aPage.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b><small>Арт. '+esc(r.art)+(r.cat?(' · '+esc(r.cat)):'')+'</small></td><td>'+clsBadge(r.cc)+'</td><td>'+clsBadge(r.lc)+'</td><td>'+stChip(r.st)+'</td><td class="r">'+(r.s>0?Math.round(r.s).toLocaleString('ru-RU'):'0')+'</td><td class="r">'+(Math.round(r.share*1000)/10).toLocaleString('ru-RU')+'%</td><td class="r">'+(r.av==null?'<span class="mu" title="наличие неизвестно">н/д</span>':Math.round(r.av).toLocaleString('ru-RU'))+'</td>'+(AF.more?('<td class="r">'+(r.onh==null?'<span class="mu">н/д</span>':Math.round(r.onh).toLocaleString('ru-RU'))+'</td><td class="r">'+(r.ship==null?'<span class="mu">н/д</span>':Math.round(r.ship).toLocaleString('ru-RU'))+'</td><td class="r">'+(r.res==null?'<span class="mu">н/д</span>':Math.round(r.res).toLocaleString('ru-RU'))+'</td>'):'')+(function(){var e=whIncSel(whIncomingByArt()[r.art],whAll?null:whSel);return '<td class="r wh-inc" title="'+esc((e&&e.rows?e.rows:[]).map(function(x){return x.dest+' · '+x.status+' '+x.qty+' шт · '+(x.eta?('к '+x.eta.slice(8,10)+'.'+x.eta.slice(5,7)+'.'+x.eta.slice(0,4)):'даты уточняются');}).join('\n'))+'">'+whIncCell(e)+(AF.more?whIncDetail(e):'')+'</td>';})()+'</tr>';}).join(''):'<tr><td colspan="'+(AF.more?11:8)+'" class="sv-empty">нет товаров под выбранный отбор'+(cell&&cellBase===0?' (в этой ячейке 0 товаров)':'')+'</td></tr>')+'</tbody></table>';
     var _grByG={};abcRows.forEach(function(r){var g=grpOf(r.sk),sub=subOf(r.sk);var G=_grByG[g]||(_grByG[g]={s:0,sku:0,buy:0,subs:{}});G.s+=r.s;G.sku++;if(r.s>0)G.buy++;var S=G.subs[sub]||(G.subs[sub]={s:0,sku:0,buy:0});S.s+=r.s;S.sku++;if(r.s>0)S.buy++;});
     var _grArr=Object.keys(_grByG).map(function(g){return [g,_grByG[g]];}).sort(function(a,b){return b[1].s-a[1].s;});
     var _grTot=_grArr.reduce(function(s,x){return s+x[1].s;},0)||1,_gmax=_grArr.length?_grArr[0][1].s:1;
@@ -3994,9 +4004,9 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +'<select class="sv-sel" onchange="setAbc(\'cls\',this.value)" aria-label="ABC компании"><option value="">ABC: все</option>'+['A','B','C'].map(function(c){return '<option value="'+c+'"'+(AF.cls===c?' selected':'')+'>ABC компании: '+c+'</option>';}).join('')+'</select>'
       +'<div class="sv-relp"><button class="sv-sel btn" onclick="abcWhPop()" aria-expanded="'+(!!state.abcWhOpen)+'">Склады: '+(whAll?'все':whSel.length+' выбрано')+' ▾</button>'+whPop+'</div>'
       +'<label class="sv-ck inl"><input type="checkbox" '+(AF.stock?'checked':'')+' onchange="setAbc(\'stock\',this.checked)"> Только в наличии</label>'
-      +'<input class="sv-search" id="abcQ" placeholder="Поиск по товару или артикулу" value="'+esc(AF.q||'')+'" oninput="abcSearch(this)"></div>'
+      +'<button class="sv-sel btn" onclick="setAbc(\'more\','+(AF.more?0:1)+')" title="Показать «в наличии», «отгружается», «в резерве» и разбивку ожидаемых поставок по складам">'+(AF.more?'− Свернуть столбцы':'+ Развернуть столбцы')+'</button>'+'<input class="sv-search" id="abcQ" placeholder="Поиск по товару или артикулу" value="'+esc(AF.q||'')+'" oninput="abcSearch(this)"></div>'
       +abcTable
-      +'<div class="sv-pager"><span>'+(cell?('Показано '+abcFiltered.length+' из '+cellBase+' товаров ячейки'):('Показано '+(abcFiltered.length?(aPg*APS+1):0)+'–'+Math.min(abcFiltered.length,aPg*APS+APS)+' из '+abcFiltered.length+' товаров'))+'</span><div><button '+(aPg<=0?'disabled':'')+' onclick="setAbc(\'page\','+(aPg-1)+')" aria-label="Назад">‹</button><button class="on">'+(aPg+1)+' / '+aPages+'</button><button '+(aPg>=aPages-1?'disabled':'')+' onclick="setAbc(\'page\','+(aPg+1)+')" aria-label="Вперёд">›</button></div></div>'
+      +'<div class="sv-pager"><span>'+(cell?('Показано '+abcFiltered.length+' из '+cellBase+' товаров ячейки'):('Показано '+(abcFiltered.length?(aPg*APS+1):0)+'–'+Math.min(abcFiltered.length,aPg*APS+APS)+' из '+abcFiltered.length+' товаров'))+'</span><div><button '+(aPg<=0?'disabled':'')+' onclick="setAbc(\'page\','+(aPg-1)+')" aria-label="Назад">‹</button>'+(AF.all?'<button class="on" onclick="setAbc(\'all\',0)">Свернуть</button>':(aPages>1?'<button class="on" onclick="setAbc(\'all\',1)">Показать все</button>':''))+'<button '+(aPg>=aPages-1?'disabled':'')+' onclick="setAbc(\'page\','+(aPg+1)+')" aria-label="Вперёд">›</button></div></div>'
       +'<div class="sv-note2">Статус «Брал раньше» определяется по аналогичному периоду прошлого года ('+(yr-1)+'): покупки в нём были, в текущем периоде нет. Более ранняя история в выгрузке не используется; «Не брал» значит — нет покупок ни в текущем периоде, ни в сопоставимом периоде прошлого года. Локальные фильтры таблицы не меняют показатели вверху страницы.</div></section>'
       +matrixBlock;
     window.__svExp.abc={sliceKey:sliceKey,rows:abcRows,filtered:abcFiltered,stat:stat,tot:tot,mtx:mtx,cell:cell,AF:AF,whSel:whSel,whAll:whAll,scope:scopeText(),lvl:_lvlHdr,period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr),brand:(sf.brand.length?sf.brand.join('/'):'все бренды'),lo:lo,hi:hi,compTotal:compTotal,T:T,WHO:WHO};
@@ -4081,6 +4091,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     else if(k==='stock'){F.stock=!!v;F.page=0;}
     else if(k==='sort'){if(F.sk===v)F.sd=-(F.sd||-1);else{F.sk=v;F.sd=(v==='n')?1:-1;}F.page=0;}
     else if(k==='page'){F.page=v;}
+    else if(k==='all'){F.all=!!v;F.page=0;}
+    else if(k==='more'){F.more=!!v;}
     if(window.render)render();};
   window.abcSearch=function(el){var F=state.abcF||(state.abcF={st:'all',cls:'',q:'',stock:false,sk:'s',sd:-1,page:0});F.q=el.value;F.page=0;var p=el.selectionStart;render();svFocus('abcQ',p);};
   window.abcCellPick=function(cc,lc){

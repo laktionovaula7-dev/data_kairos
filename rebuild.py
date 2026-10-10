@@ -466,7 +466,8 @@ def load_stock():
             elif 'доступно' in t: COL['avail']=i
     # opt = по продажному складу (для оборачиваемости); comp/wh = по ВСЕМ складам (для «Всего доступно»)
     agg=defaultdict(lambda:{'name':'','in_stock':0.0,'shipping':0.0,'reserved':0.0,'available':0.0,'incoming':0.0,
-                            'company':0.0,'wh':defaultdict(float)})
+                            'company':0.0,'wh':defaultdict(float),
+                            'whAv':defaultdict(float),'whShip':defaultdict(float),'whRes':defaultdict(float)})
     cur_sklad=None
     for r,v in enumerate(allrows,1):
         g=lambda i:(v[i] if len(v)>i else None)
@@ -483,13 +484,18 @@ def load_stock():
             q7=num(g(COL['in']))
             d['company']+=q7                               # все склады
             if q7: d['wh'][wh_bucket(cur_sklad)]+=q7
+            _b=wh_bucket(cur_sklad)                        # доступно / отгружается / резерв — по группам складов (для «Доступно» в ABC)
+            d['whAv'][_b]+=num(g(COL['avail'])); d['whShip'][_b]+=num(g(COL['ship'])); d['whRes'][_b]+=num(g(COL['res']))
             if cur_sklad==STOCK_WAREHOUSE:                 # только продажный склад
                 d['in_stock']+=q7; d['shipping']+=num(g(COL['ship'])); d['reserved']+=num(g(COL['res']))
                 d['available']+=num(g(COL['avail']))       # «в пути/в производстве» теперь из файла слежения (load_tracking)
     stock={a:{'name':d['name'],'in_stock':round(d['in_stock'],1),'shipping':round(d['shipping'],1),
               'reserved':round(d['reserved'],1),'available':round(d['available'],1),
               'incoming':round(d['incoming'],1),'company_in_stock':round(d['company'],1),
-              'wh':{k:round(val,1) for k,val in d['wh'].items() if abs(val)>=0.5}} for a,d in agg.items()}
+              'wh':{k:round(val,1) for k,val in d['wh'].items() if abs(val)>=0.5},
+              'whAv':{k:round(val,1) for k,val in d['whAv'].items() if abs(val)>=0.5},
+              'whShip':{k:round(val,1) for k,val in d['whShip'].items() if abs(val)>=0.5},
+              'whRes':{k:round(val,1) for k,val in d['whRes'].items() if abs(val)>=0.5}} for a,d in agg.items()}
     print(f"  остатки: оборачиваемость по «{STOCK_WAREHOUSE}», «Всего доступно» по всем складам — {len(stock)} артикулов")
     return stock
 
@@ -954,7 +960,7 @@ def build_krs(S, stock, plan, crm, price):
         exp_q=ex.get('expired',0); soon_q=ex.get('soon',0)
         turn[art]={'dos':(round(dos) if dos is not None else None),'in_stock':inst,
                    'available':s['available'],'reserved':s.get('reserved',0),'shipping':s.get('shipping',0),'incoming':s.get('incoming',0),
-                   'wh':s.get('wh',{}),'company_in_stock':s.get('company_in_stock',0),
+                   'wh':s.get('wh',{}),'whAv':s.get('whAv',{}),'whShip':s.get('whShip',{}),'whRes':s.get('whRes',{}),'company_in_stock':s.get('company_in_stock',0),
                    'sold':round(recent_qty_art.get(art,0)),'frozen':frozen,'name':s['name'],
                    'exp_near':ex.get('nearest'),'exp_days':ex.get('nearest_days'),
                    'exp_expired':exp_q,'exp_soon':soon_q,
