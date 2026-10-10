@@ -3840,7 +3840,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     window.__svExp=window.__svExp||{};window.__svExp.geo={rows:geoFlat,sales:sales,lens:_gBr,noBindCity:noBindCity,noBindOk:noBindOk,scope:scopeText(),period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr)};
 
     // ================= ВИД 3: ТОВАРЫ И БРЕНДЫ =================
-    var pMode=(state.prodMode==='all')?'all':'top',pQ=(state.prodQ||'').toLowerCase(),pSk=state.prodSort||'s',pSd=state.prodDir||-1,pPg=state.prodPage||0,PPS=12;
+    var pMode='top',pQ=(state.prodQ||'').toLowerCase(),pSk=state.prodSort||'s',pSd=state.prodDir||-1,pPg=state.prodPage||0,PPS=12;
     var skuList=Object.keys(bySku).filter(function(k){return bySku[k]>0;}).map(function(k){var si=D.txSkus[k]||['','—',0,''];return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',s:bySku[k],p:bySkuPrev[k]||0};}).sort(function(a,b){return b.s-a.s;});
     var BRS=[['KRONbuild','#FDCF08','#2A2A2A'],['ENKI','#D3DDD7','#207E66'],['HeadRock','#ECE8E1','#C7001F']];
     var brandStrip=oneBrand?'':('<div class="sv-brands">'+BRS.map(function(b){var v=byBr[b[0]]||0,on=(sf.brand.indexOf(b[0])>=0);return '<button class="sv-bt'+(on?' on':'')+'" onclick="toggleSF(\'brand\',\''+b[0]+'\')" aria-pressed="'+on+'"><span class="sv-bdot" style="background:'+b[1]+';color:'+b[2]+'">'+b[0].charAt(0)+'</span><span class="sv-bn">'+b[0]+'<b>'+fmtMoney(v)+'</b></span><span class="sv-bp"><b>'+(sales>0?Math.round(v/sales*100):0)+'%</b>доля продаж</span><span class="sv-chev">›</span></button>';}).join('')+'</div>');
@@ -3856,9 +3856,20 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       return '<div class="cg-wrap"><svg viewBox="0 0 300 165" class="cgauge" role="img" aria-label="Структура выручки по категориям">'+ribs+'</svg><div class="cg-center"><div class="cg-num">'+m1(sales)+'</div><div class="cg-unit">млн ₽</div></div></div>';})();
     var catLeg=catAll.map(function(c){var on=(!c.other&&sf.category.indexOf(c.name)>=0);return '<button class="sv-cl'+(on?' on':'')+'" '+(c.other?'disabled':'onclick="toggleSF(\'category\',\''+qs(c.name)+'\')"')+'><i style="background:'+c.col+'"></i><span class="n">'+esc(c.name)+'</span><b>'+(sales>0?(Math.round(c.sales/sales*1000)/10).toLocaleString('ru-RU'):0)+'%</b><span class="v">'+m1(c.sales)+'</span></button>';}).join('');
     // ===== Структура продаж: товарные группы (из bySku) для гейджа и раскрывающегося списка =====
-    var _sgByG={};Object.keys(bySku).forEach(function(k){var v=bySku[k]||0;if(v<=0)return;var g=grpOf(k),sub=subOf(k);var G=_sgByG[g]||(_sgByG[g]={s:0,subs:{}});G.s+=v;G.subs[sub]=(G.subs[sub]||0)+v;});
+    var _sgByG={};Object.keys(bySku).forEach(function(k){var v=bySku[k]||0;if(v<=0)return;var g=grpOf(k),sub=subOf(k);var G=_sgByG[g]||(_sgByG[g]={s:0,p:0,subs:{}});G.s+=v;G.subs[sub]=(G.subs[sub]||0)+v;});
+    Object.keys(bySkuPrev||{}).forEach(function(k){var pv=bySkuPrev[k]||0;if(pv<=0)return;var g=grpOf(k);if(_sgByG[g])_sgByG[g].p+=pv;});
     var _sgArr=Object.keys(_sgByG).map(function(g){return [g,_sgByG[g]];}).sort(function(a,b){return b[1].s-a[1].s;});
     var _sgTot=_sgArr.reduce(function(s,x){return s+x[1].s;},0)||1,_sgMax=_sgArr.length?_sgArr[0][1].s:1;
+    var _sgSummary='';(function(){if(!_sgArr.length||sales<=0)return;
+      var t2=_sgArr.slice(0,2),t2sh=Math.round(t2.reduce(function(s,e){return s+e[1].s;},0)/_sgTot*100),t2n=t2.map(function(e){return e[0];}).join(' + ');
+      var grw=_sgArr.filter(function(e){return e[1].s>=_sgTot*0.01&&e[1].p>0;}).map(function(e){return {g:e[0],gr:(e[1].s-e[1].p)/e[1].p*100};});
+      var up=grw.slice().sort(function(a,b){return b.gr-a.gr;})[0],dn=grw.slice().sort(function(a,b){return a.gr-b.gr;})[0];
+      var tool=Math.round((byBr.HeadRock||0)/sales*100);
+      _sgSummary='<div style="background:#FBFAF7;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:2px 0 10px;font-size:12.5px;color:#4a4d52;line-height:1.55"><b>Саммари.</b> <b>'+esc(t2n)+'</b> — '+t2sh+'% выручки среза'
+        +(up?('. Быстрее всех растёт <b style="color:#1a7f4b">'+esc(up.g)+'</b> ('+(up.gr>=0?'+':'')+Math.round(up.gr)+'% к АППГ)'):'')
+        +(dn&&(!up||dn.g!==up.g)?(', слабее — <b style="color:#b3261e">'+esc(dn.g)+'</b> ('+Math.round(dn.gr)+'%)'):'')
+        +'. Инструмент (HeadRock) — '+tool+'% выручки.</div>';
+    })();
     var _sgPal=['#3B6DB3','#6AA0DB','#1F9E74','#E0A33A','#8A6FD1','#43B38A','#C76B6B'];
     var _sgNamed=_sgArr.slice(0,7).map(function(e,i){return {name:e[0],sales:e[1].s,col:_sgPal[i%_sgPal.length]};});
     var _sgNamedSum=_sgNamed.reduce(function(s,x){return s+x.sales;},0),_sgOther=Math.max(0,_sgTot-_sgNamedSum);
@@ -3893,8 +3904,8 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
         +'<div class="sv-pager"><span>Показано '+(pRows.length?(pPg*PPS+1):0)+'–'+Math.min(pRows.length,pPg*PPS+PPS)+' из '+pRows.length+'</span><div><button '+(pPg<=0?'disabled':'')+' onclick="setProd(\'page\','+(pPg-1)+')" aria-label="Назад">‹</button><button class="on">'+(pPg+1)+' / '+pPages+'</button><button '+(pPg>=pPages-1?'disabled':'')+' onclick="setProd(\'page\','+(pPg+1)+')" aria-label="Вперёд">›</button></div></div>';
     }
     window.__svExp.prod={rows:skuList,sales:sales,scope:scopeText(),period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr)};
-    var prodView='<div class="sv-prod"><section class="card sv-pan"><div class="sv-t3">Структура продаж</div><div class="sv-s2">Выручка среза по товарным группам · клик по группе/подгруппе — добавить в срез · ▸ — подгруппы</div>'+_sgGauge+_sgList+'</section>'
-      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары</div><div class="sv-lvl" role="group" aria-label="Режим"><button class="'+(pMode==='top'?'on':'')+'" onclick="setProd(\'mode\',\'top\')">Топ-20</button><button class="'+(pMode==='all'?'on':'')+'" onclick="setProd(\'mode\',\'all\')">Все товары</button></div></div>'+prodHtml+'</section></div>'
+    var prodView='<div class="sv-prod"><section class="card sv-pan"><div class="sv-t3">Структура продаж</div><div class="sv-s2">Выручка среза по товарным группам · клик по группе/подгруппе — добавить в срез · ▸ — подгруппы</div>'+_sgSummary+_sgGauge+_sgList+'</section>'
+      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары <span class="mu" style="font-weight:500;font-size:12px">· топ-20 по продажам среза</span></div></div>'+prodHtml+'</section></div>'
       +'<div class="sv-gaplink"><a class="sv-link" href="javascript:void(0)" onclick="openGaps()">Посмотреть пробелы ассортимента →</a><span class="sv-fn">откроется ABC с текущим срезом и отбором «без покупок сейчас»</span></div>';
 
     // ================= КЛИЕНТЫ СРЕЗА =================
