@@ -3475,10 +3475,14 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var _planBks=selFil.map(function(f){return _bucketOf[f];}).filter(Boolean);
     var _planGrps=[];if(!_bsel.length){_planGrps=['kronenki','headrock'];}else{if(_hasK||_hasE)_planGrps.push('kronenki');if(_hasH)_planGrps.push('headrock');}
     function _coPlan(mi){if(!_planOk)return null;var t=0;_planBks.forEach(function(bk){_planGrps.forEach(function(g){t+=(((_cells[bk]||{})[g]||{})[mi])||0;});});return t;}
-    var _planYtdS=0;if(_planOk){for(var _pm=_fM;_pm<=_effM;_pm++)_planYtdS+=(_coPlan(_pm)||0)*planFrac(yr,_pm);}
+    var _PmP=(window.PERIOD||{}).mode||'';var _isMoPlan=(/^\d{4}-\d{2}$/.test(_PmP)||_PmP==='custom');
+    var _planYtdS=0;if(_planOk){
+      if(_isMoPlan){for(var _pm=_fM;_pm<=_effM;_pm++)_planYtdS+=(_coPlan(_pm)||0)*planFrac(yr,_pm);}
+      else{for(var _pmA=1;_pmA<=12;_pmA++)_planYtdS+=(_coPlan(_pmA)||0);}   // годовой план — как на главной
+    }
     var _cutC=dataCut(),_partialCut=!!(_cutC&&_cutC.partial&&_cutC.y===yr&&_effM===_cutC.m);
     var _planV2;
-    if(_planOk&&_planYtdS>0){var _pd=sales/_planYtdS*100,_rem=Math.max(0,_planYtdS-sales);_planV2='<div class="sp2-l">Выполнение плана</div><div class="sp2-row"><div class="sp2-pct">'+Math.round(_pd)+'%</div><div class="sp2-track"><span style="width:'+Math.min(100,Math.max(2,_pd))+'%"></span></div></div><div class="sp2-sub">'+(planFrac(yr,_effM)<1?('План на '+cutTxt()+' (месяц пропорционально дням)'):'План')+' '+fmtMoney(_planYtdS)+' · '+(_rem>0?('До плана '+fmtMoney(_rem)):('Сверх плана '+fmtMoney(sales-_planYtdS)))+'</div>';}
+    if(_planOk&&_planYtdS>0){var _pd=sales/_planYtdS*100,_rem=Math.max(0,_planYtdS-sales);_planV2='<div class="sp2-l">Выполнение плана</div><div class="sp2-row"><div class="sp2-pct">'+Math.round(_pd)+'%</div><div class="sp2-track"><span style="width:'+Math.min(100,Math.max(2,_pd))+'%"></span></div></div><div class="sp2-sub">'+((_isMoPlan&&planFrac(yr,_effM)<1)?('План на '+cutTxt()+' (месяц пропорционально дням)'):(_isMoPlan?'План':'Годовой план'))+' '+fmtMoney(_planYtdS)+' · '+(_rem>0?('До плана '+fmtMoney(_rem)):('Сверх плана '+fmtMoney(sales-_planYtdS)))+'</div>';}
     else{_planV2='<div class="sp2-l">Выполнение плана</div><div class="sp2-row"><div class="sp2-pct sp2-na">—</div></div><div class="sp2-sub">'+((!_brPlanOk)?'план задан на KRONbuild+ENKI вместе — выберите оба бренда':'план — по филиалам и брендам, без региона/города/менеджера/клиента')+'</div>';}
     var _hd=_heroDelta;var _heroDl=(_hd!=null)?('<div class="sp2-pd '+(_hd>=0?'up':'dn')+'">'+(_hd>=0?'▲ +':'▼ ')+_hd+'%</div>'):'';
     var _v2css='<style>'
