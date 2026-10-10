@@ -3905,8 +3905,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     }
     window.__svExp.prod={rows:skuList,sales:sales,scope:scopeText(),period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr)};
     var prodView='<div class="sv-prod"><section class="card sv-pan"><div class="sv-t3">Структура продаж</div><div class="sv-s2">Выручка среза по товарным группам · клик по группе/подгруппе — добавить в срез · ▸ — подгруппы</div>'+_sgSummary+_sgGauge+_sgList+'</section>'
-      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары <span class="mu" style="font-weight:500;font-size:12px">· топ-20 по продажам среза</span></div></div>'+prodHtml+'</section></div>'
-      +'<div class="sv-gaplink"><a class="sv-link" href="javascript:void(0)" onclick="openGaps()">Посмотреть пробелы ассортимента →</a><span class="sv-fn">откроется ABC с текущим срезом и отбором «без покупок сейчас»</span></div>';
+      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары <span class="mu" style="font-weight:500;font-size:12px">· топ-20 по продажам среза</span></div></div>'+prodHtml+'</section></div>';
 
     // ================= КЛИЕНТЫ СРЕЗА =================
     var cliCls=abcOf(byCli),cliLim=state.svCliLim||15;
@@ -3966,6 +3965,18 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
         var subRows=subs.map(function(se){var s=se[0],S=se[1],sOn=(sf.sub.indexOf(s)>=0);return '<div class="grp-sub'+(sOn?' on':'')+'" onclick="event.stopPropagation();toggleSF(\'sub\',\''+qs(s)+'\')"><span class="sn">'+esc(s)+'</span><span class="v">'+fmtMoney(S.s)+'</span><span class="k">'+S.buy+'/'+S.sku+' SKU</span></div>';}).join('');
         return '<details class="grp"'+(on?' open':'')+'><summary class="grp-sum'+(on?' on':'')+'"><span class="ar">▸</span><span class="gn" onclick="event.preventDefault();event.stopPropagation();toggleSF(\'group\',\''+qs(g)+'\')">'+esc(g)+'</span><span class="bar"><i style="width:'+Math.max(2,Math.round(G.s/_gmax*100))+'%"></i></span><span class="v">'+fmtMoney(G.s)+'</span><span class="pc">'+Math.round(G.s/_grTot*100)+'%</span><span class="k">'+G.buy+'/'+G.sku+' SKU</span></summary><div class="grp-subs">'+subRows+'</div></details>';}).join('')
       +'</section>';
+    var _brTxt=sf.brand.length?sf.brand.join(', '):'все бренды';
+    var _perTxt=MN[_fM-1]+'–'+MN[_effM-1]+' '+yr;
+    var _cov=tot.t?Math.round(tot.b/tot.t*100):0,_aCov=stat.A.t?Math.round(stat.A.b/stat.A.t*100):0;
+    var _top10=sales>0?Math.round(skuList.slice(0,10).reduce(function(s,r){return s+r.s;},0)/sales*100):0;
+    var _aGapPot=nb.filter(function(x){return x.abc==='A';}).reduce(function(s,x){return s+(x.comp||0);},0);
+    function _plz(n){var a=n%10,b=n%100;return (a===1&&b!==11)?'позицию':((a>=2&&a<=4&&(b<10||b>=20))?'позиции':'позиций');}
+    function _plh(n){var a=n%10,b=n%100;return (a===1&&b!==11)?'ходовую':((a>=2&&a<=4&&(b<10||b>=20))?'ходовые':'ходовых');}
+    var _asum='<section class="card sv-pan" style="margin-bottom:12px"><div class="sv-t3">Вывод по ассортименту <span class="mu" style="font-weight:500;font-size:12px">· '+esc(_brTxt)+' · '+esc(_perTxt)+'</span></div><div style="font-size:13px;color:#3a3b3d;line-height:1.6;margin-top:4px">'
+      +(_isWhole
+        ?('Продавалось <b>'+tot.b+' из '+tot.t+'</b> позиций ассортимента (<b>'+_cov+'%</b>). Топ-10 товаров дают <b>'+_top10+'%</b> выручки. Срез совпадает со всей компанией — пробелов по классам нет.')
+        :('Продавалось <b>'+tot.b+' из '+tot.t+'</b> позиций базы ABC (<b>'+_cov+'%</b>). По классу <b>A</b> покрытие <b>'+_aCov+'%</b>'+(stat.A.nb>0?(': не берут <b>'+stat.A.nb+'</b> '+_plh(stat.A.nb)+' '+_plz(stat.A.nb)+(stat.A.na?(' (из них <b>'+stat.A.na+'</b> на складе)'):'')):' — весь класс A в продажах')+'. Топ-10 SKU — <b>'+_top10+'%</b> выручки среза.'+(_aGapPot>0&&stat.A.nb>0?(' По компании эти A-позиции дают ≈ <b>'+fmtMoney(_aGapPot)+'</b>.'):'')))
+      +' <a class="sv-link" href="javascript:void(0)" onclick="openGaps()" style="white-space:nowrap">Смотреть пробелы →</a></div></section>';
     var abcView='<div class="sv-head2"><div><div class="sv-t2">Покрытие ассортимента</div><div class="sv-s2">ABC компании за период: '+esc(MN[_fM-1]+' — '+MN[_effM-1]+' '+yr)+(sf.brand.length?(' · база: '+esc(sf.brand.join(', '))):'')+' · классифицируются товары, не клиенты</div></div><div class="sv-relp"><button class="sv-btn" onclick="abcExpToggle()">⭳ Экспорт в Excel</button>'+expPop+'</div></div>'
       +'<div class="sv-acs">'+abcCards+'</div>'+(_isWhole?'<div class="sv-note2" style="margin:-6px 2px 14px">Срез совпадает со всей компанией, поэтому покрытие по определению 100% и не оценивается: показана структура ассортимента — доля SKU и доля выручки каждого класса.</div>':'')
       +'<section class="card sv-pan"><div class="sv-t3">'+(cell?'Товары выбранной ячейки':'Ассортимент')+'</div>'+cellLabel
@@ -4018,7 +4029,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     function svFoldH(id,title,note,body){var o=state.svFold||{},open=(o[id]!==undefined)?o[id]:(id!=='abc');return '<section id="sv-'+id+'" class="card sv-fold sv-sec'+(open?' open':'')+'"><button class="sv-fh" onclick="svFold(\''+id+'\')" aria-expanded="'+open+'"><i></i><b>'+title+'</b><span>'+note+'</span></button>'+(open?'<div class="sv-fb">'+body+'</div>':'')+'</section>';}
     var brDyn='<section class="sv-brdw"><div class="sv-fdh"><b>Динамика брендов</b>'+_segHtml+'</div><div class="sv-brd sv-brd-row">'+_showGrps.map(function(g,gi){var sr=_grpSeries(g);return dynLineDark(g,sr.fa,sr.ba,g[3],gi===0);}).join('')+'</div>'+_planNote+'</section>';
     var svBody=_isAbc?abcView:(SV==='all'?('<section id="sv-geo" class="sv-sec">'+geoView+'</section>'
-      +svFoldH('prod','Бренды, категории и товары',Object.keys(bySku).length+' товаров',brandUni+brDyn+prodView)
+      +svFoldH('prod','Бренды, категории и товары',Object.keys(bySku).length+' товаров',brandUni+brDyn+prodView+_asum)
       +svFoldH('abc','Ассортимент и ABC','база: вся компания за период',abcView)):(SV==='geo'?geoView:(SV==='prod'?prodView:dynView)));
     if(state.svScroll){var _sid=state.svScroll;state.svScroll=null;setTimeout(function(){if(window.svGo)svGo(_sid);},80);}
     var headArea=salesThemeCss+st+svCss+svH1+bar+chips;
