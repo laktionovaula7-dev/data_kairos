@@ -860,6 +860,11 @@ def build_krs(S, stock, plan, crm, price):
         _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
         if _mg: cReg[nm],cFil[nm]=_mg[0],_mg[1]; _man_filled+=1
     if _man_filled: print(f"  ручная привязка региона: {_man_filled}")
+    # Москва и область — единый регион «Москва» (МО не отдельный ФО; заодно у этих клиентов появляется менеджер)
+    _mo=0
+    for nm in list(cReg):
+        if cReg[nm]=='Московская область': cReg[nm]='Москва'; cFil[nm]='Москва'; _mo+=1
+    if _mo: print(f"  Москва+МО объединены: {_mo} клиентов")
     SNG_REG={'Беларусь','Казахстан','Кыргызстан','СНГ'}
     def bucket(nm):
         if cChan.get(nm)=='СЕТИ': return 'Сети'
