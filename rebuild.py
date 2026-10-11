@@ -891,6 +891,10 @@ def build_krs(S, stock, plan, crm, price):
         else: cMgr[nm]='Не назначен'
     # ---- город/субъект по клиенту (ИЗ ПРОДАЖ: округ→субъект→город) ----
     cCity=dict(S.get('clientCity',{})); cSubj=dict(S.get('clientSubject',{}))
+    # город — только реальный город: значения-субъекты (область/край/республика/округ/ФО) чистим
+    _cityBad=re.compile(r'област|\bкрай\b|республик|\bао\b|автономн|округ|\bфо\b', re.I)
+    for nm in list(cCity):
+        if cCity[nm] and _cityBad.search(cCity[nm]): cCity[nm]=''
     for nm in list(cReg):
         _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
         if _mg: cSubj[nm]=_mg[2]; cCity[nm]=_mg[3]
