@@ -32,6 +32,7 @@ F_STOCK= _pick(DATA/"остатки по сериям 09.10.xlsx", DATA/"Ост�
                DATA/"Остатки и доступность по сериям.xlsx", ROOT/"Остатки и доступность по сериям.xlsx")
 F_EXPIRY=ROOT/"Отчет по товарам на складах с окончанием срока годности.xlsx"
 F_PRICE= ROOT/"Прайс NEW HR+KRON+ENKI МСК-ВЛ (03 Сентября 2026г) (1).xlsx"
+F_GEOFILL=_pick(ROOT/"Клиенты_с_юрадресами_и_городами_Битрикс.xlsx")   # ручное дозаполнение город/субъект/ФО (из Битрикс-юрадресов)
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
@@ -823,6 +824,26 @@ def _daysago(iso, ref):
     try: y,m,d=map(int,iso.split('-')); return (ref-date(y,m,d)).days
     except Exception: return None
 
+def load_geo_fill():
+    """Ручное дозаполнение гео из Битрикса: Компания/ИНН -> (ФО, субъект, город)."""
+    if not (F_GEOFILL and F_GEOFILL.exists()): return {}, {}
+    import openpyxl
+    def _city(s):
+        s=(s or '').strip()
+        return ' '.join('-'.join(p.capitalize() for p in w.split('-')) for w in s.lower().split()) if s else ''
+    wb=openpyxl.load_workbook(F_GEOFILL,read_only=True,data_only=True); ws=wb[wb.sheetnames[0]]
+    by_inn={}; by_name={}
+    for r in ws.iter_rows(min_row=2,values_only=True):
+        gg=lambda i:(str(r[i]).strip() if i<len(r) and r[i] not in (None,'') else '')
+        comp=gg(4)
+        if not comp: continue
+        inn=re.sub(r'\D','',gg(5)); rec={'fo':gg(1),'subj':gg(10),'city':_city(gg(9))}
+        if inn: by_inn[inn]=rec
+        by_name[nrm(comp)]=rec
+    wb.close()
+    print(f"  гео-дозаполнение (Битрикс): {len(by_name)} записей · с городом {sum(1 for v in by_name.values() if v['city'])} · с субъектом {sum(1 for v in by_name.values() if v['subj'])}")
+    return by_inn, by_name
+
 def build_krs(S, stock, plan, crm, price):
     _exc={_cnorm(x) for x in EXCLUDE_CLIENTS_RAW}
     def excluded(nm): return (_cnorm(nm) in _exc) or (S['client_net'].get(nm,0)<=0)
@@ -843,6 +864,10 @@ def build_krs(S, stock, plan, crm, price):
     cReg=dict(S['clientRegion']); cFil=dict(S['clientFilial']); cChan=dict(S['clientChannel'])
     # CRM привязываем ПО ИНН (справочник _client_inn.xlsx); имя — только запасной матч
     _cinn,_kont=load_kontur()
+    _gf_inn,_gf_nm=load_geo_fill()
+    def _geofill(nm):
+        _i=re.sub(r'\D','',str(_cinn.get(nrm(nm)) or ''))
+        return (_i and _gf_inn.get(_i)) or _gf_nm.get(nrm(nm))
     crmByInn={}
     for _rec in crm.values():
         _i=str((_rec or {}).get('inn') or '').strip()
@@ -868,6 +893,16 @@ def build_krs(S, stock, plan, crm, price):
     for nm in list(cReg):
         if cReg[nm]=='Московская область': cReg[nm]='Москва'; cFil[nm]='Москва'; _mo+=1
     if _mo: print(f"  Москва+МО объединены: {_mo} клиентов")
+    # ФО для оставшихся «Не распределён» — из Битрикс-дозаполнения
+    _gf_reg=0
+    for nm in list(cReg):
+        if cReg[nm]!='Не распределён': continue
+        rec=_geofill(nm); fo=(rec or {}).get('fo','')
+        if fo and fo not in ('Не распределён','Московская область'):
+            cReg[nm]=fo; cFil[nm]=('Владивосток' if fo in VLAD_OKRUGA else 'Москва'); _gf_reg+=1
+        elif (rec or {}).get('fo')=='Московская область':
+            cReg[nm]='Москва'; cFil[nm]='Москва'; _gf_reg+=1
+    if _gf_reg: print(f"  ФО из Битрикс-дозаполнения: {_gf_reg} клиентов")
     SNG_REG={'Беларусь','Казахстан','Кыргызстан','СНГ'}
     def bucket(nm):
         if cChan.get(nm)=='СЕТИ': return 'Сети'
@@ -894,13 +929,25 @@ def build_krs(S, stock, plan, crm, price):
         else: cMgr[nm]='Не назначен'
     # ---- город/субъект по клиенту (ИЗ ПРОДАЖ: округ→субъект→город) ----
     cCity=dict(S.get('clientCity',{})); cSubj=dict(S.get('clientSubject',{}))
-    # город — только реальный город: значения-субъекты (область/край/республика/округ/ФО) чистим
-    _cityBad=re.compile(r'област|\bкрай\b|республик|\bао\b|автономн|округ|\bфо\b', re.I)
+    # город — только реальный город: чистим значения-субъекты (область/край/…) и названия компаний (ООО/ИП/…)
+    _cityBad=re.compile(r'област|\bкрай\b|республик|\bао\b|автономн|округ|\bфо\b|\bооо\b|\bоао\b|\bзао\b|\bпао\b|\bип\b|\bтд\b|\bтк\b|\bгк\b', re.I)
     for nm in list(cCity):
         if cCity[nm] and _cityBad.search(cCity[nm]): cCity[nm]=''
+    # дозаполнение город/субъект из Битрикс-файла
+    _gf_cs=0
+    for nm in list(cReg):
+        rec=_geofill(nm)
+        if not rec: continue
+        if rec.get('city'): cCity[nm]=rec['city']
+        if rec.get('subj'): cSubj[nm]=rec['subj']
+        if rec.get('city') or rec.get('subj'): _gf_cs+=1
+    if _gf_cs: print(f"  город/субъект из Битрикс: {_gf_cs} клиентов")
     for nm in list(cReg):
         _mg=MANUAL_CLIENT_GEO.get(nrm(nm))
         if _mg: cSubj[nm]=_mg[2]; cCity[nm]=_mg[3]
+    # финальная чистка города: убрать юрформы/субъекты, попавшие из любых источников
+    for nm in list(cCity):
+        if cCity[nm] and _cityBad.search(cCity[nm]): cCity[nm]=''
     # ---- конфликты: менеджер (список≠CRM), нет ИНН, нет CRM по ИНН ----
     conflicts=[]
     for nm in cReg:
