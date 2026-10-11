@@ -305,6 +305,7 @@ def parse_sales(rows, price):
     clientYear=defaultdict(lambda:defaultdict(float))
     tx=[]; tx_clients=[]; tx_cats=[]; tx_skus=[]; ci_m={}; ct_m={}; sk_m={}
     inwork=[]; maxdate=0; orderStack={}   # level -> (di,iso,num,osum, company, region, filial, channel)
+    seen_real=set(); dupLvl=[None]        # дедуп: номер «Реализации» учитываем один раз (безопасная доклейка дневных файлов)
     def ci(x):
         if x not in ci_m: ci_m[x]=len(tx_clients); tx_clients.append(x)
         return ci_m[x]
@@ -335,6 +336,7 @@ def parse_sales(rows, price):
         stack[lvl]=name
         for L in [x for x in stack if x>lvl]: del stack[L]
         for L in [x for x in orderStack if x>=lvl]: del orderStack[L]
+        if dupLvl[0] is not None and lvl<=dupLvl[0]: dupLvl[0]=None   # вышли из поддерева дубль-реализации
         if lvl==0: continue
         low=name.lower()
         def cur_ord():
@@ -342,6 +344,11 @@ def parse_sales(rows, price):
             return orderStack[max(ks)] if ks else None
         parent=stack.get(lvl-1)
         if _isdoc(name):
+            if low.startswith('реализаци'):      # дедуп по НОМЕРУ+ДАТЕ реализации (номера в 1С переиспользуются по годам!)
+                _rm=_rx.search(name)
+                _rkey=(name.split(' от ')[0].strip().split()[-1] if ' от ' in name else name)+'|'+(_rm.group(0) if _rm else '')
+                if _rkey in seen_real: dupLvl[0]=lvl; continue
+                seen_real.add(_rkey)
             if not _isdoc(parent or ''):        # верхний документ компании (Заказ/Реализация/Комиссия…)
                 comp_name=parent or stack.get(1) or 'Прочее'
                 _cl=comp_name.lower()                         # маркетплейсы: канал СЕТИ, но не показывать как «компанию»
@@ -392,6 +399,7 @@ def parse_sales(rows, price):
         nxt=rows[i+1][0] if i+1<n else -1
         if nxt>lvl: continue
         if nt is None: continue
+        if dupLvl[0] is not None: continue         # товар под уже учтённой реализацией — пропуск (дедуп доклейки)
         co=cur_ord()
         if not co: continue
         if is_posm(name):                          # POSM/непродаваемое (каталоги, пакеты, буклеты) — исключаем из аналитики
@@ -1207,8 +1215,13 @@ if __name__=='__main__':
     if F_SALES_CUR.exists():
         rows+=filter_year(load_sales_rows(F_SALES_CUR, CACHE_CUR), {2026})
         print(f"  слияние: 2024-2025 из истории + 2026 из свежего файла ({F_SALES_CUR.name})")
-        # дневной файл («Продажи за ДД.ММ») не догружаем: он датируется по дате заказа и не сдвигает период —
-        # для обновления продаж нужен ПОЛНЫЙ файл за 01.01.2026–<дата> (как «продажи 08.10»).
+        # дневные догрузы: кладём «Продажи за ДД.ММ.xlsx» — дубли реализаций отсекает дедуп в parse_sales
+        for _dp in sorted(DATA.glob('Продажи за *.xlsx')):
+            if _dp.name.startswith('~$'): continue
+            _dc=ROOT/'work'/('_sday_'+re.sub(r'\W','',_dp.stem)[:24]+'.pkl')
+            _drows=filter_year(load_sales_rows(_dp,_dc),{2026})
+            rows+=_drows
+            print(f"  + дневной догруз {_dp.name}: {len(_drows)} строк (дубли реализаций отсеются дедупом)")
     else:
         rows+=filter_year(load_sales_rows(F_SALES, CACHE), {2026})
         print("  [!] свежего файла 2026 нет — 2026 взято из полной истории")
