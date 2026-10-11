@@ -3891,7 +3891,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     window.__svExp=window.__svExp||{};window.__svExp.geo={rows:geoFlat,sales:sales,lens:_gBr,noBindCity:noBindCity,noBindOk:noBindOk,scope:scopeText(),period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr)};
 
     // ================= ВИД 3: ТОВАРЫ И БРЕНДЫ =================
-    var pMode='top',pQ=(state.prodQ||'').toLowerCase(),pSk=state.prodSort||'s',pSd=state.prodDir||-1,pPg=state.prodPage||0,PPS=12;
+    var pQ=(state.prodQ||'').toLowerCase().trim(),pMode=pQ?'all':'top',pSk=state.prodSort||'s',pSd=state.prodDir||-1,pPg=state.prodPage||0,PPS=12;
     var skuList=Object.keys(bySku).filter(function(k){return bySku[k]>0;}).map(function(k){var si=D.txSkus[k]||['','—',0,''];return {sk:k,art:si[0],name:si[1],cat:D.txCats[si[2]]||'',brand:si[3]||'',s:bySku[k],p:bySkuPrev[k]||0};}).sort(function(a,b){return b.s-a.s;});
     var BRS=[['KRONbuild','#FDCF08','#2A2A2A'],['ENKI','#D3DDD7','#207E66'],['HeadRock','#ECE8E1','#C7001F']];
     var brandStrip=oneBrand?'':('<div class="sv-brands">'+BRS.map(function(b){var v=byBr[b[0]]||0,on=(sf.brand.indexOf(b[0])>=0);return '<button class="sv-bt'+(on?' on':'')+'" onclick="toggleSF(\'brand\',\''+b[0]+'\')" aria-pressed="'+on+'"><span class="sv-bdot" style="background:'+b[1]+';color:'+b[2]+'">'+b[0].charAt(0)+'</span><span class="sv-bn">'+b[0]+'<b>'+fmtMoney(v)+'</b></span><span class="sv-bp"><b>'+(sales>0?Math.round(v/sales*100):0)+'%</b>доля продаж</span><span class="sv-chev">›</span></button>';}).join('')+'</div>');
@@ -3952,13 +3952,13 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       var pPages=Math.max(1,Math.ceil(pRows.length/PPS));if(pPg>=pPages)pPg=pPages-1;
       var pPage=pRows.slice(pPg*PPS,pPg*PPS+PPS);
       function pHead(k,l,al){var on=(pSk===k);return '<th class="'+(al||'')+'"><button class="sv-th'+(on?' on':'')+'" onclick="setProd(\'sort\',\''+k+'\')">'+l+(on?(pSd<0?' ↓':' ↑'):'')+'</button></th>';}
-      prodHtml='<div class="sv-tools"><input class="sv-search" id="prodQ" placeholder="Поиск товара, артикула…" value="'+esc(state.prodQ||'')+'" oninput="prodSearch(this)"><button class="sv-btn" onclick="prodExport()">⭳ Excel</button></div>'
+      prodHtml='<div class="sv-tools"><button class="sv-btn" onclick="prodExport()">⭳ Excel</button></div>'
         +'<table class="sv-tbl"><thead><tr>'+pHead('n','Товар','')+'<th>Группа · подгруппа</th><th>Бренд</th>'+pHead('s','Продажи','r')+'<th class="r">Доля среза</th><th class="r">К прошлому году</th></tr></thead><tbody>'+(pPage.length?pPage.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b><small>'+esc(r.art)+'</small></td><td>'+esc(r.grp||'—')+'<small>'+esc(r.cat||'—')+'</small></td><td>'+esc(r.brand)+'</td><td class="r">'+fmtMoney(r.s)+'</td><td class="r">'+(sales>0?pct(+(r.s/sales*100).toFixed(2)):'—')+'</td><td class="r">'+dchip(r.s,r.p)+'</td></tr>';}).join(''):'<tr><td colspan="6" class="sv-empty">ничего не найдено</td></tr>')+'</tbody></table>'
         +'<div class="sv-pager"><span>Показано '+(pRows.length?(pPg*PPS+1):0)+'–'+Math.min(pRows.length,pPg*PPS+PPS)+' из '+pRows.length+'</span><div><button '+(pPg<=0?'disabled':'')+' onclick="setProd(\'page\','+(pPg-1)+')" aria-label="Назад">‹</button><button class="on">'+(pPg+1)+' / '+pPages+'</button><button '+(pPg>=pPages-1?'disabled':'')+' onclick="setProd(\'page\','+(pPg+1)+')" aria-label="Вперёд">›</button></div></div>';
     }
     window.__svExp.prod={rows:skuList,sales:sales,scope:scopeText(),period:(window.PERIOD&&window.PERIOD.mode)||('весь '+yr)};
     var prodView='<div class="sv-prod"><section class="card sv-pan"><div class="sv-t3">Структура продаж</div><div class="sv-s2">Выручка среза по товарным группам · клик по группе/подгруппе — добавить в срез · ▸ — подгруппы</div>'+_sgGauge+_sgList+'%%ASUM%%</section>'
-      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары <span class="mu" style="font-weight:500;font-size:12px">· топ-10 по продажам среза</span></div></div>'+prodHtml+'</section></div>';
+      +'<section class="card sv-pan"><div class="sv-prow"><div class="sv-t3">Товары <span class="mu" style="font-weight:500;font-size:12px">· '+(pQ?('найдено '+skuList.filter(function(r){return (r.name+" "+r.art+" "+r.cat+" "+r.brand).toLowerCase().indexOf(pQ)>=0;}).length):'топ-10 по продажам среза')+'</span></div><input class="sv-search" id="prodQ" placeholder="Поиск: товар или артикул…" value="'+esc(state.prodQ||'')+'" oninput="prodSearch(this)" style="max-width:280px"></div>'+prodHtml+'</section></div>';
 
     // ================= КЛИЕНТЫ СРЕЗА =================
     var cliCls=abcOf(byCli),cliLim=state.svCliLim||15;
