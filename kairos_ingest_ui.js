@@ -25,8 +25,15 @@ UI.boot = function () {
   var started = false;
   function start() {
     if (started) return; started = true;
+    if(root.KairosIngest&&root.KairosIngest.fillMissingGeo)root.KairosIngest.fillMissingGeo(root.KRS_DATA,emb);
     var s = document.getElementById('krs-app'); if (!s) return;
     var n = document.createElement('script'); n.textContent = s.textContent; document.body.appendChild(n);
+  }
+  if(root.KairosShared){
+    root.KairosShared.boot().then(start).catch(function(e){
+      var box=document.createElement('div');box.style.cssText='padding:40px;font:16px system-ui';box.textContent=e.message;
+      var retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=function(){location.reload();};box.appendChild(retry);document.body.appendChild(box);
+    });return;
   }
   var timer = setTimeout(start, 2500);
   idbGet().then(function (st) {
@@ -93,12 +100,12 @@ function render() {
       '<div><button class="ki-btn" data-pick="' + k.id + '">' + (f ? 'Заменить' : 'Выбрать файл') + '</button></div>' +
       (f ? '<div class="ki-file">✓ ' + esc(f.name) + ' · ' + mb(f.size) + '</div>' : '<small>' + k.hint + '</small>') + '</div>';
   }).join('');
-  box.innerHTML = '<div class="ki-h"><div><h2>Обновить данные из 1С</h2><p>Выберите свежие выгрузки — дашборд пересчитается прямо в браузере, ничего никуда не отправляется.</p></div><button class="ki-x" data-x>×</button></div>' +
+  box.innerHTML = '<div class="ki-h"><div><h2>Обновить данные из 1С</h2><p>Новый файл заменяет продажи только за период в шапке отчёта. История за остальные даты сохраняется. '+(root.KairosShared?'После применения данные увидит весь отдел.':'Пересчёт и сохранение выполняются в этом браузере.')+'</p></div><button class="ki-x" data-x>×</button></div>' +
     '<div class="ki-b"><div class="ki-now">' + nowText() + '</div>' +
     '<div class="ki-drop" id="ki-drop">Перетащите сюда файлы (можно сразу все три) или выберите ниже</div>' + rows +
     '<div id="ki-out"></div></div>' +
-    '<div class="ki-f"><button class="ki-btn link" data-act="exp">Сохранить текущие данные в файл</button><button class="ki-btn link" data-act="imp">Открыть файл данных</button>' +
-    ((root.__krsSource || {}).kind === 'uploaded' ? '<button class="ki-btn link" data-act="reset">Вернуть данные из файла</button>' : '') +
+    '<div class="ki-f">'+(root.KairosShared&&root.KairosShared.isAdmin?'<button class="ki-btn link" data-act="shared-settings">Права загрузки и версии</button>':'')+'<button class="ki-btn link" data-act="exp">Сохранить текущие данные в файл</button><button class="ki-btn link" data-act="imp">Открыть файл данных</button>' +
+    (!root.KairosShared && (root.__krsSource || {}).kind === 'uploaded' ? '<button class="ki-btn link" data-act="reset">Вернуть данные из файла</button>' : '') +
     '<span class="sp"></span><button class="ki-btn" data-x>Закрыть</button><button class="ki-btn pri" id="ki-go" ' + (ok && !busy ? '' : 'disabled') + '>Загрузить и пересчитать</button></div>';
   bindBox(box);
 }
@@ -138,6 +145,7 @@ function bindBox(box) {
   [].forEach.call(box.querySelectorAll('[data-act]'), function (b) {
     b.onclick = function () {
       var a = b.getAttribute('data-act');
+      if(a==='shared-settings'){root.KairosShared.settings().catch(function(e){out('<div class="ki-w err">'+esc(e.message)+'</div>');});return;}
       if (a === 'exp') exportData(); else if (a === 'imp') pickFile('.kairos,.gz', importData);
       else if (a === 'reset') { if (confirm('Удалить загруженные в этом браузере данные и вернуться к данным из файла?')) idbDel().then(function () { location.reload(); }); }
     };
@@ -145,6 +153,7 @@ function bindBox(box) {
 }
 
 function run() {
+  if(root.KairosShared&&!root.KairosShared.canUpload){out('<div class="ki-w err">Администратор должен выдать вам право обновлять данные.</div>');return;}
   if (busy || !files.sales) return; busy = true;
   var go = document.getElementById('ki-go'); if (go) go.disabled = true;
   out('<div id="ki-st" style="font-size:13px;font-weight:600">Начинаю…</div><div class="ki-bar"><i id="ki-pb"></i></div><small style="color:#727987">Файл продаж большой (≈18 МБ) — обычно это занимает 10–40 секунд. Не закрывайте вкладку.</small>');
@@ -170,12 +179,13 @@ function report(K, base, sec) {
     (inf.filter ? '<div style="font-size:11.5px;color:#727987;margin-bottom:8px">Отбор в файле: ' + esc(inf.filter) + '</div>' : '') +
     (ing.notes.length ? '<div style="font-size:12px;color:#727987;margin-bottom:6px">' + ing.notes.map(esc).join(' · ') + '</div>' : '') +
     warn.map(function (w) { return '<div class="ki-w">' + esc(w) + '</div>'; }).join('') +
-    '<div style="margin-top:10px"><button class="ki-btn pri" id="ki-apply">Применить и открыть дашборд</button> <span style="font-size:12px;color:#727987">Данные сохранятся в этом браузере.</span></div>');
+    '<div style="margin-top:10px"><button class="ki-btn pri" id="ki-apply">'+(root.KairosShared?'Опубликовать для всего отдела':'Применить и открыть дашборд')+'</button> <span style="font-size:12px;color:#727987">'+(root.KairosShared?'Предыдущую версию можно восстановить.':'Данные сохранятся в этом браузере.')+'</span></div>');
   var a = document.getElementById('ki-apply');
   if (a) a.onclick = function () {
     a.disabled = true; a.textContent = 'Сохраняю…';
-    idbPut({ data: result, savedAt: Date.now() }).then(function () { location.reload(); }).catch(function (e) {
+    (root.KairosShared?root.KairosShared.publish(result):idbPut({ data: result, savedAt: Date.now() })).then(function () { location.reload(); }).catch(function (e) {
       a.disabled = false; a.textContent = 'Применить и открыть дашборд';
+      if(root.KairosShared){out('<div class="ki-w err">'+esc(e.message)+'</div>');return;}
       out('<div class="ki-w err">Браузер не дал сохранить данные (' + esc(e && e.message || e) + '). Чаще всего это приватное окно или запрет на хранение для локальных файлов. Откройте дашборд в обычном окне Chrome/Edge.</div>');
     });
   };
@@ -192,6 +202,7 @@ function exportData() {
   });
 }
 function importData(l) {
+  if(root.KairosShared){out('<div class="ki-w">Для общей базы загрузите исходную выгрузку Excel. Файл данных браузера не публикуется.</div>');return;}
   var f = l[0]; out('<div style="font-size:13px">Читаю файл данных…</div>');
   gunzip(f).then(function (t) {
     var d = JSON.parse(t);

@@ -36,7 +36,7 @@ F_GEOFILL=_pick(ROOT/"Клиенты_с_юрадресами_и_городами
 CRM_DIR= ROOT/"Регионы"                                # выгрузки CRM по округам (ЮФО.xls, ПФО.xls, …, ЦФО.files)
 F_PLAN = _pick(DATA/"План_25_26.xlsx", ROOT/"План_25_26.xlsx")
 # Слежение / в пути: заказы поставщику (Китай) со статусами «в производстве / в пути» и датами поступления
-F_TRACK= _pick(DATA/"в пути 09.10.xlsx", DATA/"в пути и в производстве.xlsx",
+F_TRACK= _pick(DATA/"Склады и сроки — один лист.xlsx", DATA/"в пути 09.10.xlsx", DATA/"в пути и в производстве.xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления..xlsx",
                DATA/"Остатки и доступность товаров (слежение) с датами выхода, прихода, поступления.xlsx")
 
@@ -107,6 +107,7 @@ def load_price():
                 if len(r)>6: art_price[a]=_pr(r[6])
     wb.close()
     price={nrm(n):(a,n,b,c) for a,n,b,c in rows}
+    price['__price_rows__']=rows
     price['__art_price__']=art_price                        # цена по артикулу
     print(f"  прайс: {len(rows)} SKU, цен по артикулу: {len(art_price)}")
     return price
@@ -517,6 +518,16 @@ def load_stock():
 def load_tracking(price):
     import openpyxl
     if not F_TRACK.exists(): print("  [!] нет файла слежения (в пути)"); return []
+    if F_TRACK.name == "Склады и сроки — один лист.xlsx":
+        from tracking_source import load_normalized_tracking
+        def classify(name):
+            cat, art = cat_art(name, price)
+            brand = brand_of(name, price)
+            return art, brand, group_cat(cat, brand, name)
+        result = load_normalized_tracking(F_TRACK, classify)
+        print(f"  поставки: {len(result)} строк; даты без выхода в море уточняются")
+        return result
+
     ns='{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'; lv={}
     try:
         with zipfile.ZipFile(F_TRACK).open('xl/worksheets/sheet1.xml') as fp:
@@ -1250,7 +1261,7 @@ def _inject_into(src_path, out_path, KRS):
 
 def export_refs(KRS, price, stock):
     """Справочники, нужные браузерному пересчёту (kairos_ingest.js): прайс, цены, остатки, партии сроков годности."""
-    KRS['refs']={'price':[[k,v[0],v[1],v[2],v[3]] for k,v in price.items() if k!='__art_price__'],
+    KRS['refs']={'price':[[nrm(v[1]),v[0],v[1],v[2],v[3]] for v in price.get('__price_rows__',[v for v in price.values() if isinstance(v,tuple)])],
                  'artPrice':price.get('__art_price__',{}),'stock':stock,'expiry':RAW_EXPIRY,
                  'stockWh':STOCK_WAREHOUSE,'turnWindow':TURN_WINDOW_DAYS}
 

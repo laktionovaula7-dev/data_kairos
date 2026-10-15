@@ -180,6 +180,7 @@ function groupCat(cat, brand, name) {
 function mkPrice(refs) {
   var m = new Map(), artCat = new Map();
   (refs.price || []).forEach(function (r) { m.set(r[0], [r[1], r[2], r[3], r[4]]); });
+  (refs.salesSkuAliases || []).forEach(function(r){if(r[1] && r[1]!=='—'){var v=[r[1],r[0],r[2],r[3]];m.set(nrm(r[0]),v);m.set(nrm(r[0]+', '+r[1]),v);}});
   m.forEach(function (v) { if (v[0] && v[3]) artCat.set(v[0], v[3]); });
   return { map: m, artCat: artCat, artPrice: refs.artPrice || {} };
 }
@@ -197,11 +198,12 @@ function dayNo(y, m, d) { return Math.round(Date.UTC(y, m - 1, d) / 86400000); }
 
 /* ───────────── продажи: строки → список строк отчёта ───────────── */
 KI.loadSalesRows = async function (blob, progress) {
-  var rows = [], hdr = [];
+  var rows = [], hdr = [], compact = false;
   await readSheet(blob, { sheet: 'Лист_1', progress: progress }, function (r, lv, c) {
     if (r <= 13) hdr.push(c);
     if (r < 8) return;
-    var c1 = c[0] == null ? null : c[0], art = c[3], q = c[5], gr = c[6], rt = c[7], nt = c[8];
+    if (r <= 13 && /количество/i.test(String(c[3]||''))) compact = true;
+    var c1 = c[0] == null ? null : c[0], art = compact ? null : c[3], q = c[compact?3:5], gr = c[compact?5:6], rt = c[compact?6:7], nt = c[compact?7:8];
     if (c1 == null && nt == null && q == null) return;
     var num = function (x) { return typeof x === 'number' ? x : null; };
     rows.push([lv, c1 != null ? String(c1).trim() : null, num(q), num(gr), num(rt), num(nt), art ? String(art).trim() : null]);
@@ -211,7 +213,7 @@ KI.loadSalesRows = async function (blob, progress) {
 };
 
 /* ───────────── порт parse_sales ───────────── */
-KI.parseSales = function (rows, P, curYear) {
+KI.parseSales = function (rows, P, curYear, range) {
   var n = rows.length, stack = [], orderStack = [];
   var company = { gross: 0, ret: 0, net: 0, qty: 0 };
   var compYear = new Map(), brandYear = new Map(), clientYear = new Map();
@@ -225,6 +227,7 @@ KI.parseSales = function (rows, P, curYear) {
   function ci(x) { var v = ci_m.get(x); if (v === undefined) { v = tx_clients.length; ci_m.set(x, v); tx_clients.push(x); } return v; }
   function kt(c) { c = c || 'Без категории'; var v = ct_m.get(c); if (v === undefined) { v = tx_cats.length; ct_m.set(c, v); tx_cats.push(c); } return v; }
   function si(name, art) {
+    var known=P.map.get(nrm(name));if(known&&known[1])name=known[1];
     var ca = catArt(name, P), cat = ca[0]; art = art || ca[1];
     if (art && P.artCat.get(art)) cat = P.artCat.get(art);
     var b = brandOf(name, P); cat = groupCat(cat, b, name);
@@ -256,9 +259,9 @@ KI.parseSales = function (rows, P, curYear) {
         if (stack[0] === 'Россия') { if (CL >= 3) subj = stack[2] || ''; if (CL >= 4) city = stack[3] || ''; }
         if (!clientSubject.has(comp_name)) clientSubject.set(comp_name, subj);
         if (!clientCity.has(comp_name)) clientCity.set(comp_name, city);
-        if (di > maxdate) maxdate = di;
+        if ((!range || (di >= range[0] && di <= range[1])) && di > maxdate) maxdate = di;
         if (iso && iso > (client_last.get(comp_name) || '')) client_last.set(comp_name, iso);
-        if (low.indexOf('заказ клиента') === 0) {
+        if (low.indexOf('заказ клиента') === 0 && (!range || (di >= range[0] && di <= range[1]))) {
           add(client_orders, comp_name, 1);
           if (m) {
             var hl = client_orderhist.get(comp_name); if (!hl) { hl = []; client_orderhist.set(comp_name, hl); }
@@ -272,6 +275,14 @@ KI.parseSales = function (rows, P, curYear) {
             }
           }
         }
+      } else {
+        // Nested registrar gives the actual sales date; keep the parent customer.
+        var ancestor=null; for(var ak=lvl-1;ak>=0;ak--)if(orderStack[ak]){ancestor=orderStack[ak];break;}
+        var registered=rx.exec(name);
+        if(ancestor && registered){
+          var documentOrder=ancestor.slice();documentOrder[0]=+(registered[3]+registered[2]+registered[1]);
+          documentOrder[1]=registered[3]+'-'+registered[2]+'-'+registered[1];orderStack[lvl]=documentOrder;
+        }
       }
       continue;
     }
@@ -282,6 +293,9 @@ KI.parseSales = function (rows, P, curYear) {
     if (!co) continue;
     if (isPosm(name)) { posm[0]++; posm[1] += nt || 0; continue; }
     var d2 = co[0], client = co[4], reg2 = co[5];
+    if(range && (d2 < range[0] || d2 > range[1]))continue;
+    if(d2>maxdate)maxdate=d2;
+    if(co[1]>(client_last.get(client)||''))client_last.set(client,co[1]);
     q = q || 0; var net = nt, b = brandOf(name, P);
     company.net += net; company.gross += (gr || 0); company.ret += (rt || 0); company.qty += q;
     add(regSales, reg2, net); add(client_net, client, net); add(client_qty, client, q);
@@ -295,7 +309,7 @@ KI.parseSales = function (rows, P, curYear) {
       cy.net += net; cy.gross += (gr || 0); cy.ret += (rt || 0); cy.qty += q;
       var by = brandYear.get(yr); if (!by) { by = new Map(); brandYear.set(yr, by); } add(by, b, net);
       var cly = clientYear.get(client); if (!cly) { cly = new Map(); clientYear.set(client, cly); } add(cly, yr, net);
-      if (net !== 0) tx.push([d2, ci(client), si(name, art), round1(q), pyRound(net)]);
+      if (net !== 0) tx.push([d2, ci(client), si(name, art), round1(q), pyRound(net), gr || 0, rt || 0]);
     }
   }
   inwork.sort(function (a, b) { return b.not_shipped - a.not_shipped; });
@@ -457,7 +471,7 @@ KI.buildKRS = function (S, stock, expiryRaw, ctx) {
   var artPrice = P.artPrice, turn = {};
   Object.keys(stock).forEach(function (art) {
     var s = stock[art], inst = s.in_stock || 0; if (inst <= 0) return;
-    var sold = recentQty.get(art) || 0, perday = sold / TURN, dos = perday > 0 ? inst / perday : null, p1 = artPrice[art] || 0;
+    var sold = recentQty.get(art) || 0, perday = sold / TURN, dos = perday > 0 ? (s.company_in_stock != null ? s.company_in_stock : inst) / perday : null, p1 = artPrice[art] || 0;
     var ex = expiry[art] || {}, expQ = ex.expired || 0, soonQ = ex.soon || 0;
     turn[art] = { dos: dos !== null ? pyRound(dos) : null, in_stock: inst, available: s.available, reserved: s.reserved || 0, incoming: s.incoming || 0, wh: s.wh || {},
       company_in_stock: s.company_in_stock || 0, sold: pyRound(sold), frozen: pyRound(inst * p1), name: s.name,
@@ -585,8 +599,8 @@ KI.buildKRS = function (S, stock, expiryRaw, ctx) {
   var K = {};
   Object.keys(D).forEach(function (k) { K[k] = D[k]; });                                  // справочники: гео, карта, план, население, Контур…
   var upd = {
-    meta: { prototype: true, note: 'Пересчитано в браузере из загруженных файлов 1С. Вся компания, ' + CUR + ' (АППГ ' + PREV + ').',
-      sourceCoverage: { period: CUR + ' (АППГ ' + PREV + ')', scope: 'Вся компания / все бренды', actualNetSales: pyRound(o_cur.net), actualUnits: Math.trunc(o_cur.qty), actualReturns: pyRound(o_cur.ret),
+    meta: { prototype: true, note: 'Пересчитано в браузере из загруженных файлов 1С. Вся компания, ' + CUR + ' (Прошлый год ' + PREV + ').',
+      sourceCoverage: { period: CUR + ' (Прошлый год ' + PREV + ')', scope: 'Вся компания / все бренды', actualNetSales: pyRound(o_cur.net), actualUnits: Math.trunc(o_cur.qty), actualReturns: pyRound(o_cur.ret),
         missing: ['маржинальность', 'себестоимость', 'скидки'] } },
     periods: [{ id: 'ytd', label: CUR + ' год', available: true }], overview: overview,
     abcSummary: { totalRevenue: pyRound(totRev), counts: { A: A.length, B: B.length, C: C.length }, totalSku: catalog.length },
@@ -628,7 +642,114 @@ KI.checkSales = function (rows, S, D) {
   return { warns: warns, info: info };
 };
 
+KI.fillMissingGeo = function(D,reference){
+  function blank(v){return !String(v||'').trim();}
+  function badCity(v){return blank(v)||/(?:^|\s)(?:обл\.?|область|край|респ\.?|рес\.?|республика|район|фо)(?:$|\s)/i.test(v)||/^(?:карелия|лнр|днр)$/i.test(v);}
+  function badSubject(v){return blank(v)||/\sфо$/i.test(v);}
+  function index(source){var out={},bad={};Object.keys(source.crm||{}).forEach(function(k){var r=source.crm[k],inn=String(r.inn||'').replace(/\D/g,'');if(!inn)return;
+    if(out[inn]&&((out[inn].city||'')!==(r.city||'')||(out[inn].subject||'')!==(r.subject||'')))bad[inn]=true;else out[inn]=r;
+  });Object.keys(bad).forEach(function(k){delete out[k];});return out;}
+  var records=index(D),fresh=index(reference||{}),geo={},ambiguous={};
+  Object.keys((reference||{}).clientInn||{}).forEach(function(n){var inn=String(reference.clientInn[n]||'').replace(/\D/g,''),r={city:(reference.clientCity||{})[n],subject:(reference.clientSubject||{})[n]};if(!inn)return;
+    if(geo[inn]&&JSON.stringify(geo[inn])!==JSON.stringify(r))ambiguous[inn]=true;else geo[inn]=r;
+  });
+  var citySubjects={};Object.keys(D.geoRef||{}).forEach(function(ok){Object.keys(D.geoRef[ok]||{}).forEach(function(sub){(D.geoRef[ok][sub]||[]).forEach(function(city){var key=String(city).toLowerCase().replace(/ё/g,'е');(citySubjects[key]||(citySubjects[key]={}))[sub]=1;});});});
+  D.clientCity=D.clientCity||{};D.clientSubject=D.clientSubject||{};
+  var names={};(D.txClients||[]).forEach(function(n){names[n]=1;});Object.keys(D.clientInn||{}).forEach(function(n){names[n]=1;});
+  var count=0;Object.keys(names).forEach(function(name){
+    var inn=String((D.clientInn||{})[name]||'').replace(/\D/g,''),sources=[fresh[inn],records[inn],ambiguous[inn]?null:geo[inn]];
+    if(reference)sources.push({city:(reference.clientCity||{})[name],subject:(reference.clientSubject||{})[name]});
+    sources.forEach(function(r){if(!r)return;
+      if(badCity(D.clientCity[name])&&!badCity(r.city)){D.clientCity[name]=r.city;count++;}
+      if(badSubject(D.clientSubject[name])&&!badSubject(r.subject)){D.clientSubject[name]=r.subject;count++;}
+    });
+    if(badCity(D.clientCity[name])&&/^(?:Москва|Санкт-Петербург|Севастополь)$/i.test(D.clientSubject[name]||'')){D.clientCity[name]=D.clientSubject[name];count++;}
+    if(badSubject(D.clientSubject[name])&&!badCity(D.clientCity[name])){var key=String(D.clientCity[name]).toLowerCase().replace(/ё/g,'е'),subs=Object.keys(citySubjects[key]||{});if(subs.length===1){D.clientSubject[name]=subs[0];count++;}}
+  });
+  if((D.txClients||[]).indexOf('Михайлов Максим Николаевич')>=0){D.clientCity['Михайлов Максим Николаевич']='Владивосток';D.clientSubject['Михайлов Максим Николаевич']='Приморский край';}
+  return count;
+};
+
 KI.nrm = nrm; KI.cid = cid; KI.mkPrice = mkPrice;
+
+/* Replace the explicit export interval and retain transactions outside it. */
+KI.mergeSalesPeriod = function (fresh, D, P, from, to) {
+  function date(s) { var m=/^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s||''); return m ? +(m[3]+m[2]+m[1]) : 0; }
+  var lo=date(from),hi=date(to);
+  if(!lo||!hi||lo>hi)throw new Error('Не удалось определить период выгрузки. Нужна строка «Период: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ» в шапке отчёта.');
+  if(fresh.tx.some(function(t){return t[0]<lo||t[0]>hi;}))throw new Error('Даты продаж выходят за период в шапке отчёта. Проверьте выгрузку.');
+  var retained=(D.tx||[]).filter(function(t){return t[0]<lo||t[0]>hi;});
+  var replaced=(D.tx||[]).filter(function(t){return t[0]>=lo&&t[0]<=hi;});
+  var partialLegacy=replaced.some(function(t){var m=String(t[0]).slice(0,6),last=new Date(Date.UTC(+m.slice(0,4),+m.slice(4,6),0)).getUTCDate();return t.length<7 && (lo>+(m+'01')||hi<+(m+String(last).padStart(2,'0')));});
+  if(partialLegacy)throw new Error('Для замены части старого месяца загрузите месяц целиком: в прежней истории нет детализации возвратов по дням. Добавление новых дней доступно отдельно.');
+  // Reuse the same parser for retained product quantities and net revenue.
+  var rows=[],skus=D.txSkus||[],clients=D.txClients||[];
+  retained.forEach(function(t){
+    var sku=skus[t[2]],client=clients[t[1]],ds=String(t[0]);
+    if(!sku||!client)throw new Error('В сохранённой истории повреждён справочник продаж.');
+    rows.push([0,'Россия'],[1,client],[2,'Реализация история от '+ds.slice(6,8)+'.'+ds.slice(4,6)+'.'+ds.slice(0,4),0,0,0,t[4]],
+      [3,sku[1],t[3],t[5]!=null?t[5]:Math.max(0,t[4]),t[6]!=null?t[6]:Math.min(0,t[4]),t[4],sku[0]]);
+  });
+  var old=KI.parseSales(rows,P,Math.floor(fresh.maxdate/10000)||Math.floor(hi/10000));
+  ['clientRegion','clientFilial','clientChannel','clientCity','clientSubject'].forEach(function(key){
+    old[key].forEach(function(v,name){if(D[key]&&D[key][name]!=null)old[key].set(name,D[key][name]);});
+  });
+  old.regSales=new Map();retained.forEach(function(t){var r=(D.clientRegion||{})[clients[t[1]]]||'Не распределён';old.regSales.set(r,(old.regSales.get(r)||0)+t[4]);});
+  // Preserve exact gross/returns aggregates for wholly retained months.
+  Object.keys(old.yearMonth).forEach(function(ym){
+    if(+(ym+'31')<lo||+(ym+'01')>hi){
+      if(D.ym&&D.ym[ym]!=null)old.yearMonth[ym]=D.ym[ym];
+      if(D.ymGross&&D.ymGross[ym]!=null)old.ymGross[ym]=D.ymGross[ym];
+      if(D.ymRet&&D.ymRet[ym]!=null)old.ymRet[ym]=D.ymRet[ym];
+    }
+  });
+  function addMaps(target,src){src.forEach(function(v,k){
+    if(v instanceof Map){if(!target.has(k))target.set(k,new Map());addMaps(target.get(k),v);}
+    else if(Array.isArray(v)){var a=target.get(k)||v.map(function(){return 0;});target.set(k,a.map(function(x,i){return x+v[i];}));}
+    else if(typeof v==='number')target.set(k,(target.get(k)||0)+v);
+  });}
+  ['comp','brandYear','clientYear','client_net','client_qty','client_prod','regSales'].forEach(function(k){addMaps(fresh[k],old[k]);});
+  ['clientRegion','clientFilial','clientChannel','clientCity','clientSubject'].forEach(function(k){old[k].forEach(function(v,name){if(!fresh[k].has(name))fresh[k].set(name,v);});});
+  old.client_last.forEach(function(v,k){if(v>(fresh.client_last.get(k)||''))fresh.client_last.set(k,v);});
+  ['yearMonth','ymGross','ymRet'].forEach(function(k){Object.keys(old[k]).forEach(function(m){fresh[k][m]=(fresh[k][m]||0)+old[k][m];});});
+  // Partial months: subtract only replaced days, preserving exact legacy totals.
+  var affected={};Object.keys(D.ym||{}).forEach(function(m){if(+(m+'31')>=lo&&+(m+'01')<=hi)affected[m]=true;});
+  Object.keys(affected).forEach(function(m){
+    var last=new Date(Date.UTC(+m.slice(0,4),+m.slice(4,6),0)).getUTCDate();
+    if(lo<=+(m+'01')&&hi>=+(m+String(last).padStart(2,'0')))return;
+    var removed={yearMonth:0,ymGross:0,ymRet:0};
+    replaced.forEach(function(t){if(String(t[0]).slice(0,6)===m){removed.yearMonth+=t[4];removed.ymGross+=t[5]||0;removed.ymRet+=t[6]||0;}});
+    [['yearMonth','ym'],['ymGross','ymGross'],['ymRet','ymRet']].forEach(function(pair){
+      var field=pair[0],base=pair[1],added=(fresh[field][m]||0)-(old[field][m]||0);
+      fresh[field][m]=(D[base]&&D[base][m]||0)-removed[field]+added;
+    });
+  });
+  // Year and company gross/returns follow the merged monthly aggregates.
+  old.compYear.forEach(function(v,y){var a=fresh.compYear.get(y)||{net:0,qty:0,gross:0,ret:0};a.net+=v.net;a.qty+=v.qty;fresh.compYear.set(y,a);});
+  fresh.company.net+=old.company.net;fresh.company.qty+=old.company.qty;
+  fresh.company.gross=0;fresh.company.ret=0;
+  fresh.compYear.forEach(function(v){v.gross=0;v.ret=0;v.net=0;});
+  fresh.company.net=0;
+  Object.keys(fresh.yearMonth).forEach(function(m){var y=fresh.compYear.get(+m.slice(0,4)),g=fresh.ymGross[m]||0,r=fresh.ymRet[m]||0;y.net+=fresh.yearMonth[m];fresh.company.net+=fresh.yearMonth[m];y.gross+=g;y.ret+=r;fresh.company.gross+=g;fresh.company.ret+=r;});
+  var ci=new Map(fresh.tx_clients.map(function(v,i){return [v,i];})),ct=new Map(fresh.tx_cats.map(function(v,i){return [v,i];}));
+  function skuKey(s,cats){return s[0]&&s[0]!=='—'?JSON.stringify([s[0],s[3]]):JSON.stringify([s[0],s[1],cats[s[2]],s[3]]);}
+  var si=new Map(fresh.tx_skus.map(function(v,i){return [skuKey(v,fresh.tx_cats),i];}));
+  retained.forEach(function(t){
+    var name=clients[t[1]],sku=skus[t[2]],cat=D.txCats[sku[2]],key=skuKey(sku,D.txCats);
+    if(!ci.has(name)){ci.set(name,fresh.tx_clients.length);fresh.tx_clients.push(name);}
+    if(!ct.has(cat)){ct.set(cat,fresh.tx_cats.length);fresh.tx_cats.push(cat);}
+    if(!si.has(key)){si.set(key,fresh.tx_skus.length);fresh.tx_skus.push([sku[0],sku[1],ct.get(cat),sku[3]]);}
+    var row=t.slice();row[1]=ci.get(name);row[2]=si.get(key);fresh.tx.push(row);
+  });
+  // Keep document histories when the underlying export snapshot is available.
+  var histories=D.salesOrderHistory||{};
+  Object.keys(histories).forEach(function(name){var h=histories[name].filter(function(x){var d=date(x.date);return d<lo||d>hi;});
+    if(h.length){fresh.client_orderhist.set(name,(fresh.client_orderhist.get(name)||[]).concat(h));fresh.client_orders.set(name,(fresh.client_orders.get(name)||0)+h.length);}
+  });
+  (D.ordersInWork||[]).forEach(function(x){var d=date(x.date);if(d<lo||d>hi)fresh.inwork.push(x);});
+  fresh.maxdate=Math.max(fresh.maxdate,old.maxdate);
+  return {sales:fresh,retained:retained.length,from:from,to:to};
+};
 
 /* Полный цикл: файлы → новая модель данных. files: {sales: Blob, stock?: Blob, expiry?: Blob}. */
 KI.run = async function (files, D, onStage) {
@@ -642,8 +763,10 @@ KI.run = async function (files, D, onStage) {
     var hdr = rows.header || []; head = hdr.map(function (c) { return c.filter(function (x) { return x != null; }).join(' '); }).join('\n');
     if (head.indexOf('Партнер.Бизнес-регион') < 0) throw new Error('Это не отчёт «Продажи по бизнес регионам»: в шапке нет колонки «Партнер.Бизнес-регион». Выгрузите отчёт из 1С в том же виде, что и раньше (иерархия: бизнес-регион → партнёр → заказ → номенклатура).');
     pm = /Период:\s*(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})/.exec(head);
-    S = KI.parseSales(rows, P, cur);
-    var maxy = Math.floor(S.maxdate / 10000); if (maxy && maxy !== cur) { cur = maxy; S = KI.parseSales(rows, P, cur); }
+    if(!pm)throw new Error('В шапке выгрузки не найден период. История сохранена; выберите отчёт с указанными датами.');
+    var exportRange=pm.slice(1).map(function(v){var p=v.split('.');return +(p[2]+p[1]+p[0]);});
+    S = KI.parseSales(rows, P, cur, exportRange);
+    var maxy = Math.floor(S.maxdate / 10000); if (maxy && maxy !== cur) { cur = maxy; S = KI.parseSales(rows, P, cur, exportRange); }
   } else throw new Error('Нужен файл продаж');
   var chk = KI.checkSales(rows, S, D);
   if (pm) { chk.info.periodFrom = pm[1]; chk.info.periodTo = pm[2]; }
@@ -654,7 +777,14 @@ KI.run = async function (files, D, onStage) {
   else { expiryRaw = (D.refs || {}).expiry || {}; }
   st('Собираю модель…', 1);
   await new Promise(function (r) { setTimeout(r, 20); });
+  if(!pm)throw new Error('В шапке выгрузки не найден период. История сохранена; выберите отчёт с указанными датами.');
+  var merged=KI.mergeSalesPeriod(S,D,P,pm[1],pm[2]); S=merged.sales;
+  chk.warns=chk.warns.filter(function(w){return w.indexOf('часть истории пропадёт')<0;});
+  notes.push('Заменены продажи за '+pm[1]+' – '+pm[2]+'. За пределами периода сохранено '+merged.retained+' строк.');
+  chk.info.retained=merged.retained;
   var K = KI.buildKRS(S, stock, expiryRaw, { D: D, P: P });
+  K.salesOrderHistory=obj(S.client_orderhist);
+  KI.fillMissingGeo(K);
   K.refs = Object.assign({}, D.refs || {}, { stock: stock, expiry: expiryRaw });
   K.__ingest = { at: new Date().toISOString(), files: { sales: files.sales && files.sales.name || null, stock: files.stock && files.stock.name || null, expiry: files.expiry && files.expiry.name || null },
     warns: chk.warns, info: chk.info, notes: notes };
