@@ -3220,9 +3220,9 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
   function konturCard(c){
     var inn=(D.clientInn||{})[c.name]||(((D.crm||{})[state.client]||{}).inn)||null;
     var k=inn?((D.kontur||{})[inn]):null;
-    var H='<section class="card pad"><div class="card-title">Контур.Фокус';
-    if(!inn) return H+' '+dataTag('missing')+'</div><div style="font-size:12px;color:#8b8d90">ИНН клиента не найден в справочнике — обогащение по ИНН недоступно.</div></section>';
-    if(!k) return H+' '+dataTag('missing')+'</div><div style="font-size:12px;color:#8b8d90">ИНН <b>'+esc(inn)+'</b> найден. Данные Контур.Фокус ещё не загружены (пробный ключ, лимит 50). После прогона обогащения появятся реквизиты, финансы и светофор рисков.</div></section>';
+    var H='<div class="mx-card" style="margin-bottom:16px"><div class="mx-ct"><span>• Контур.Фокус</span>';
+    if(!inn) return H+dataTag('missing')+'</div><div style="font-size:12px;color:#8b8d90">ИНН клиента не найден в справочнике — обогащение по ИНН недоступно.</div></div>';
+    if(!k) return H+dataTag('missing')+'</div><div style="font-size:12px;color:#8b8d90">ИНН <b>'+esc(inn)+'</b> найден. Данные Контур.Фокус ещё не загружены (пробный ключ, лимит 50). После прогона обогащения появятся реквизиты, финансы и светофор рисков.</div></div>';
     var live=((k.status||'').toLowerCase().indexOf('действ')>=0);
     var stBadge=badge(k.status||'—', live?'green':'red');
     var head=k.head?((k.head.fio||'')+(k.head.position?(' · '+k.head.position):'')):'—';
@@ -3237,23 +3237,23 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
       +kpi('Уставный капитал', cap,'coins','из ЕГРЮЛ','',(k.capital!=null)?'source':'missing')
       +kpi('Контакты', ((k.phones||0)+' тел · '+(k.emails||0)+' e-mail'),'phone','в Контуре','',(k.phones||k.emails)?'source':'missing')
       +'</div>';
-    var reqBlock='<section class="card pad"><div class="card-title">Контур.Фокус · реквизиты по ИНН <span class="right">'+stBadge+(k.focusHref?(' · <a href="'+esc(k.focusHref)+'" target="_blank" rel="noopener" style="color:#C7001F;font-weight:600;text-decoration:none">открыть в Фокусе \u2197</a>'):'')+'</span></div>'
+    var reqBlock='<div class="mx-card" style="margin-bottom:16px"><div class="mx-ct"><span>• Контур.Фокус · реквизиты по ИНН</span><span class="right">'+stBadge+(k.focusHref?(' · <a href="'+esc(k.focusHref)+'" target="_blank" rel="noopener" style="color:#C7001F;font-weight:600;text-decoration:none">открыть в Фокусе \u2197</a>'):'')+'</span></div>'
       +reqKpis
       +'<div class="grid-2" style="margin-top:12px">'
       +'<div>'+row('Наименование',k.name)+row('Полное имя',k.fullName)+row('ИНН · КПП',(k.inn||inn)+(k.kpp?(' · '+k.kpp):''))+row('ОГРН',k.ogrn)+row('Дата регистрации',k.regDate)+row('ОПФ',k.opf)+'</div>'
       +'<div>'+row('Руководитель',head)+row('ОКВЭД (осн.)',okv)+row('Уставный капитал',cap)+row('Учредители',fnd)+row('Юр. адрес',k.address)+'</div>'
-      +'</div></section>';
+      +'</div></div>';
     var finBlock='';
     if(k.finance&&(k.finance.revenue||k.finance.profit)){
       var f=k.finance; var share=(f.revenue&&c.sales)?(c.sales/f.revenue*100):null;
-      finBlock='<section class="card pad"><div class="card-title">Финансы компании <span class="right" style="color:#8b8d90;font-weight:500;font-size:12px">отчётность '+(f.year||'—')+' · Контур</span></div>'
+      finBlock='<div class="mx-card" style="margin-bottom:16px"><div class="mx-ct"><span>• Финансы компании</span><span class="right" style="color:#8b8d90;font-weight:500;font-size:12px">отчётность '+(f.year||'—')+' · Контур</span></div>'
         +'<div class="kpi-grid">'
         +kpi('Выручка', f.revenue!=null?fmtMoney(f.revenue):'—','sales','годовая, из ФНС','',f.revenue!=null?'source':'missing')
         +kpi('Прибыль', f.profit!=null?fmtMoney(f.profit):'—','trend','чистая','',f.profit!=null?'source':'missing')
         +kpi('Налоги уплачено', f.tax!=null?fmtMoney(f.tax):'—','coins','за год','',f.tax!=null?'source':'missing')
         +kpi('Наша доля в выручке', share!=null?(share<0.1?'<0,1%':(share.toFixed(share<10?1:0)+'%')):'—','target','наши продажи / выручка','',share!=null?'source':'missing')
         +'</div>'
-        +'<div style="font-size:11px;color:#8b8d90;margin-top:8px">Доля кошелька: наши продажи клиенту ('+fmtMoney(c.sales||0)+' за период) к его годовой выручке ('+(f.revenue!=null?fmtMoney(f.revenue):'—')+').</div></section>';
+        +'<div style="font-size:11px;color:#8b8d90;margin-top:8px">Доля кошелька: наши продажи клиенту ('+fmtMoney(c.sales||0)+' за период) к его годовой выручке ('+(f.revenue!=null?fmtMoney(f.revenue):'—')+').</div></div>';
     }
     var riskBlock='';
     if(k.risk){
@@ -3270,7 +3270,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
         +chip('Суды (ответчик)', (r.courtDefendantSum)?'warn':'ok', (r.courtDefendantSum)?fmtMoney(r.courtDefendantSum):'нет')
         +chip('Доп. проверка', r.additionalCheck?'warn':'ok', r.additionalCheck?'рекомендуется':'не требуется');
       var links=(r.linkManagerCount||r.linkFounderCount||r.linkAddressToday)?('<div style="font-size:12px;color:#5a5750;margin-top:6px">Связи: руководитель в '+(r.linkManagerCount||0)+' компаниях · учредитель в '+(r.linkFounderCount||0)+' · по адресу '+(r.linkAddressToday||0)+' компаний.</div>'):'';
-      riskBlock='<section class="card pad"><div class="card-title">Светофор рисков <span class="right" style="color:#8b8d90;font-weight:500;font-size:12px">Контур.Фокус</span></div><div style="margin-top:10px">'+chips+'</div>'+links+'</section>';
+      riskBlock='<div class="mx-card" style="margin-bottom:16px"><div class="mx-ct"><span>• Светофор рисков</span><span class="right" style="color:#8b8d90;font-weight:500;font-size:12px">Контур.Фокус</span></div><div style="margin-top:10px">'+chips+'</div>'+links+'</div>';
     }
     return reqBlock+finBlock+riskBlock;
   }
@@ -3278,14 +3278,14 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
     var kb=konturCard(c);
     const r=(D.crm||{})[state.client];
     if(!r){var _inn=(D.clientInn&&D.clientInn[c.name])||(c&&c.inn)||'';
-      return kb+`<div class="card pad"><div class="card-title">Реквизиты и контакты ${dataTag('missing')}</div>${missingBlock('Нет в CRM-выгрузке','Эта компания не найдена в выгрузках Битрикс24 (они загружены по всем федеральным округам). Вероятно, клиент не заведён в CRM или в CRM отличается наименование. Сверка идёт по названию и ИНН.')}${_inn?('<div style="font-size:12px;color:#4a4d52;margin-top:10px">ИНН по справочнику продаж: <b>'+esc(_inn)+'</b></div>'):''}</div>`;}
+      return kb+`<div class="mx-card" style="margin-bottom:16px"><div class="mx-ct"><span>• Реквизиты и контакты</span>${dataTag('missing')}</div>${missingBlock('Нет в CRM-выгрузке','Эта компания не найдена в выгрузках Битрикс24 (они загружены по всем федеральным округам). Вероятно, клиент не заведён в CRM или в CRM отличается наименование. Сверка идёт по названию и ИНН.')}${_inn?('<div style="font-size:12px;color:#4a4d52;margin-top:10px">ИНН по справочнику продаж: <b>'+esc(_inn)+'</b></div>'):''}</div>`;}
     const RS='display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eef0f3;font-size:13px';
     const KS='color:#727987;flex:0 0 auto';const VS='color:#1c2430;font-weight:600;text-align:right;word-break:break-word';
     const row=(label,val)=>`<div style="${RS}"><span style="${KS}">${label}</span><span style="${VS}${val?'':';color:#b8bec8;font-weight:400'}">${val?esc(val):'—'}</span></div>`;
     const cat=r.category?badge(r.category,statusKind(r.category)):dataTag('missing','нет');
     return kb+`<div class="kpi-grid">${kpi('Категория клиента',r.category||'—','tag',r.employees?('сотрудников: '+r.employees):'тип из CRM','',r.category?'source':'missing')}${kpi('ИНН',r.inn||'—','box',r.kpp?('КПП '+r.kpp):'реквизит из CRM','',r.inn?'source':'missing')}${kpi('Ответственный',r.responsible||'—','users','менеджер в CRM','',r.responsible?'source':'missing')}${kpi('Договор',r.contractNo?('№ '+r.contractNo):'—','calendar',r.contractDate?('от '+r.contractDate):'номер договора','',r.contractNo?'source':'missing')}</div>
     <div class="grid-2">
-      <div class="card pad"><div class="card-title">Реквизиты ${dataTag('source','CRM ЦФО')}</div>
+      <div class="mx-card"><div class="mx-ct"><span>• Реквизиты</span>${dataTag('source','CRM ЦФО')}</div>
         ${row('Наименование',r.nameFull||r.nameShort)}
         ${row('Краткое имя',r.nameShort)}
         ${row('ИНН',r.inn)}${row('КПП',r.kpp)}${row('ОГРН',r.ogrn)}
@@ -3293,7 +3293,7 @@ var MCX_RUSUBJ={"Khabarovsk":"Хабаровский","Amur":"Амурская",
         ${row('Юр. адрес',r.address)}
         ${row('Банк',r.bank)}
       </div>
-      <div class="card pad"><div class="card-title">Контакты и статус ${dataTag('source','CRM ЦФО')}</div>
+      <div class="mx-card"><div class="mx-ct"><span>• Контакты и статус</span>${dataTag('source','CRM ЦФО')}</div>
         <div style="${RS}"><span style="${KS}">Категория</span><span>${cat}</span></div>
         ${row('Телефон',r.phone)}
         ${row('E-mail',r.email)}
